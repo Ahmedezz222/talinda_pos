@@ -39,27 +39,33 @@ from ui.components.closing_amount_dialog import ClosingAmountDialog
 from init_database import init_database
 
 
+# Import configuration
+from config import get_config
+
+# Get configuration instance
+config = get_config()
+
 class ApplicationConfig:
     """Configuration class for the application."""
     
-    APP_NAME = "Talinda POS"
-    APP_VERSION = "2.0.0"
-    APP_AUTHOR = "Talinda POS Team"
+    APP_NAME = config.APP_NAME
+    APP_VERSION = config.APP_VERSION
+    APP_AUTHOR = config.APP_AUTHOR
     
     # Window settings
     LOGIN_WINDOW_SIZE = (400, 500)
     LOGIN_WINDOW_TITLE = f"{APP_NAME} - Login"
     
     # File paths
-    CSS_FILE = "resources/styles/main.qss"
-    LOGO_FILE = "resources/styles/logo.png"
+    CSS_FILE = config.CSS_FILE
+    LOGO_FILE = config.LOGO_FILE
     
     # Styling
-    PRIMARY_COLOR = "#1976d2"
-    SECONDARY_COLOR = "#424242"
-    SUCCESS_COLOR = "#4caf50"
-    ERROR_COLOR = "#f44336"
-    WARNING_COLOR = "#ff9800"
+    PRIMARY_COLOR = config.PRIMARY_COLOR
+    SECONDARY_COLOR = config.SECONDARY_COLOR
+    SUCCESS_COLOR = config.SUCCESS_COLOR
+    ERROR_COLOR = config.ERROR_COLOR
+    WARNING_COLOR = config.WARNING_COLOR
 
 
 class LoggingConfig:
