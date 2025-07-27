@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox, QHBoxLayout, QProgressBar
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox, QHBoxLayout, QProgressBar, QFileDialog
 from PyQt5.QtCore import Qt, QTimer
 import logging
 
@@ -6,11 +6,12 @@ class ClosingAmountDialog(QDialog):
     def __init__(self, parent=None, shift=None, auth_controller=None):
         super().__init__(parent)
         self.setWindowTitle('Enter Closing Amount')
-        self.setFixedSize(400, 250)
+        self.setFixedSize(450, 300)
         self.amount = None
         self.shift = shift
         self.auth_controller = auth_controller
         self.logger = logging.getLogger(__name__)
+        self.generated_filepath = None
         self.init_ui()
 
     def init_ui(self):
@@ -96,6 +97,26 @@ class ClosingAmountDialog(QDialog):
         """)
         self.cancel_btn.clicked.connect(self.reject)
         
+        self.save_btn = QPushButton('Save Report As...')
+        self.save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #229954;
+            }
+            QPushButton:disabled {
+                background-color: #bdbdbd;
+            }
+        """)
+        self.save_btn.clicked.connect(self.save_report_as)
+        self.save_btn.setEnabled(False)  # Initially disabled until report is generated
+        
         self.ok_btn = QPushButton('Close Shift & Generate Report')
         self.ok_btn.setStyleSheet("""
             QPushButton {
@@ -116,6 +137,7 @@ class ClosingAmountDialog(QDialog):
         self.ok_btn.clicked.connect(self.handle_ok)
         
         button_layout.addWidget(self.cancel_btn)
+        button_layout.addWidget(self.save_btn)
         button_layout.addWidget(self.ok_btn)
         layout.addLayout(button_layout)
         
@@ -143,6 +165,7 @@ class ClosingAmountDialog(QDialog):
         self.ok_btn.setEnabled(False)
         self.cancel_btn.setEnabled(False)
         self.amount_input.setEnabled(False)
+        self.save_btn.setEnabled(False)
         
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -170,8 +193,12 @@ class ClosingAmountDialog(QDialog):
             # Generate Excel report
             self._generate_excel_report()
             
-            # Close dialog after a short delay to show completion
-            QTimer.singleShot(1500, self.accept)
+            # Enable save button after report is generated
+            if self.generated_filepath:
+                self.save_btn.setEnabled(True)
+                self.status_label.setText("Report generated! You can save it to another location or close.")
+            
+            # Don't auto-close, let user choose to save or close
             
         except Exception as e:
             self.logger.error(f"Error during shift closing: {str(e)}")
@@ -182,7 +209,7 @@ class ClosingAmountDialog(QDialog):
             self.progress_bar.setVisible(False)
 
     def _generate_excel_report(self):
-        """Generate and open Excel report."""
+        """Generate Excel report."""
         try:
             from utils.excel_report_generator import ExcelReportGenerator
             
@@ -195,6 +222,7 @@ class ClosingAmountDialog(QDialog):
             filepath = report_generator.generate_shift_report(self.shift, self.amount)
             
             if filepath:
+                self.generated_filepath = filepath
                 # Open the Excel file
                 if report_generator.open_excel_file(filepath):
                     self.logger.info(f"Excel report opened successfully: {filepath}")
@@ -211,4 +239,53 @@ class ClosingAmountDialog(QDialog):
             self.status_label.setText("Excel functionality not available.")
         except Exception as e:
             self.logger.error(f"Error generating Excel report: {str(e)}")
-            self.status_label.setText("Report generation failed.") 
+            self.status_label.setText("Report generation failed.")
+
+    def save_report_as(self):
+        """Save the generated report to a user-specified location."""
+        if not self.generated_filepath:
+            QMessageBox.warning(self, 'No Report', 'No report has been generated yet.')
+            return
+        
+        try:
+            from pathlib import Path
+            from datetime import datetime
+            
+            # Get the original filename
+            original_path = Path(self.generated_filepath)
+            original_name = original_path.name
+            
+            # Create a default filename with timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            default_name = f"shift_report_{timestamp}.xlsx"
+            
+            # Open file dialog for save location
+            filepath, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save Shift Report As",
+                default_name,
+                "Excel Files (*.xlsx);;All Files (*)"
+            )
+            
+            if filepath:
+                # Copy the generated file to the new location
+                import shutil
+                shutil.copy2(self.generated_filepath, filepath)
+                
+                self.logger.info(f"Report saved to: {filepath}")
+                QMessageBox.information(
+                    self, 
+                    'Report Saved', 
+                    f'Report has been saved successfully to:\n{filepath}'
+                )
+                
+                # Update status
+                self.status_label.setText(f"Report saved to: {Path(filepath).name}")
+                
+        except Exception as e:
+            self.logger.error(f"Error saving report: {str(e)}")
+            QMessageBox.critical(
+                self, 
+                'Save Error', 
+                f'Failed to save report:\n{str(e)}'
+            ) 

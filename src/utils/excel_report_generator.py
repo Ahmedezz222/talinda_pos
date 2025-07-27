@@ -432,4 +432,100 @@ class ExcelReportGenerator:
             
         except Exception as e:
             logger.error(f"Error opening Excel file: {e}")
-            return False 
+            return False
+    
+    def save_report_as(self, shift: Shift, closing_amount: float, parent_widget=None) -> Optional[str]:
+        """
+        Generate and save Excel report to a user-specified location.
+        
+        Args:
+            shift: The shift object containing shift data
+            closing_amount: The closing amount entered by the cashier
+            parent_widget: Parent widget for file dialog (optional)
+            
+        Returns:
+            Optional[str]: Path to the saved Excel file, or None if failed
+        """
+        try:
+            from PyQt5.QtWidgets import QFileDialog
+            from pathlib import Path
+            from datetime import datetime
+            
+            # Generate the report first
+            filepath = self.generate_shift_report(shift, closing_amount)
+            if not filepath:
+                logger.error("Failed to generate report for save operation")
+                return None
+            
+            # Create a default filename with timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            default_name = f"shift_report_{shift.user.username}_{timestamp}.xlsx"
+            
+            # Open file dialog for save location
+            if parent_widget:
+                save_path, _ = QFileDialog.getSaveFileName(
+                    parent_widget,
+                    "Save Shift Report As",
+                    default_name,
+                    "Excel Files (*.xlsx);;All Files (*)"
+                )
+            else:
+                # Fallback to a default location if no parent widget
+                save_path = str(self.reports_dir / default_name)
+            
+            if save_path:
+                # Copy the generated file to the new location
+                import shutil
+                shutil.copy2(filepath, save_path)
+                
+                logger.info(f"Report saved to: {save_path}")
+                return save_path
+            else:
+                logger.info("Save operation cancelled by user")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error saving report: {str(e)}")
+            return None
+    
+    def get_report_preview(self, shift: Shift, closing_amount: float) -> Dict:
+        """
+        Get a preview of the report data without generating the file.
+        
+        Args:
+            shift: The shift object containing shift data
+            closing_amount: The closing amount entered by the cashier
+            
+        Returns:
+            Dict: Preview data including summary statistics
+        """
+        try:
+            total_sales = self._get_shift_total_sales(shift)
+            sales_data = self._get_shift_sales_data(shift)
+            product_data = self._get_shift_product_data(shift)
+            
+            expected_cash = shift.opening_amount + total_sales
+            difference = closing_amount - expected_cash
+            
+            preview = {
+                'shift_id': shift.id,
+                'cashier_name': shift.user.full_name or shift.user.username,
+                'open_time': shift.open_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'close_time': shift.close_time.strftime('%Y-%m-%d %H:%M:%S') if shift.close_time else 'Not closed',
+                'opening_amount': shift.opening_amount,
+                'closing_amount': closing_amount,
+                'total_sales': total_sales,
+                'expected_cash': expected_cash,
+                'difference': difference,
+                'total_transactions': len(sales_data),
+                'total_items': sum(sale['total_items'] for sale in sales_data),
+                'average_transaction': total_sales / len(sales_data) if sales_data else 0,
+                'products_sold': len(product_data),
+                'total_products_quantity': sum(product['quantity'] for product in product_data)
+            }
+            
+            return preview
+            
+        except Exception as e:
+            logger.error(f"Error generating report preview: {str(e)}")
+            return {} 
