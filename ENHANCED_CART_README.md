@@ -95,7 +95,7 @@ class EnhancedCartWidget(QWidget):
 - Traditional sale processing
 - Payment integration
 - Receipt generation
-- Sales reporting
+- Order management
 
 ## Benefits
 

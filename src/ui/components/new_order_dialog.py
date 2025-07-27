@@ -241,7 +241,9 @@ class NewOrderDialog(QDialog):
                 })
             
             if self.order_controller.add_items_to_order(self.order, items):
-                QMessageBox.information(self, "Success", "Order saved successfully!")
+                # Refresh the session to ensure the order is properly saved
+                self.order_controller.refresh_session()
+                QMessageBox.information(self, "Success", f"Order {self.order.order_number} saved successfully!")
                 self.order_created.emit(self.order)
                 self.accept()
             else:
@@ -249,6 +251,7 @@ class NewOrderDialog(QDialog):
                 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to create order: {str(e)}")
+            print(f"Order creation error: {e}")
 
 
 class OrderNameTagDialog(QDialog):

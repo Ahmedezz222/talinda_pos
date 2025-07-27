@@ -428,6 +428,13 @@ class OrderManagementWidget(QWidget):
         self.add_order_cards_to_tab(self.active_tab, active_orders)
         self.add_order_cards_to_tab(self.completed_tab, completed_orders)
         self.add_order_cards_to_tab(self.cancelled_tab, cancelled_orders)
+        
+        # Emit signal that orders were updated
+        self.order_updated.emit()
+    
+    def force_refresh(self):
+        """Force a complete refresh of the order list."""
+        self.refresh_orders()
     
     def add_order_cards_to_tab(self, tab, orders):
         """Add order cards to a specific tab using responsive grid layout."""
@@ -502,7 +509,13 @@ class OrderManagementWidget(QWidget):
             if hasattr(cart_widget, 'load_order'):
                 cart_widget.load_order(order)
                 # Switch to POS tab
-                parent.sidebar.setCurrentRow(0)
+                if hasattr(parent, 'sidebar'):
+                    parent.sidebar.setCurrentRow(0)
+                QMessageBox.information(self, "Order Loaded", f"Order {order.order_number} loaded into cart!")
+            else:
+                QMessageBox.warning(self, "Error", "Cart widget does not support loading orders.")
+        else:
+            QMessageBox.warning(self, "Error", "Could not find cart widget.")
     
     def __del__(self):
         """Clean up timer."""

@@ -36,6 +36,7 @@ from controllers.auth_controller import AuthController
 from ui.main_window import MainWindow
 from ui.components.opening_amount_dialog import OpeningAmountDialog
 from ui.components.closing_amount_dialog import ClosingAmountDialog
+from models.user import Shift, ShiftStatus
 from init_database import init_database
 
 
@@ -78,10 +79,10 @@ class LoggingConfig:
         log_dir.mkdir(exist_ok=True)
         
         logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            level=config.get_log_level(),
+            format=config.LOG_FORMAT,
             handlers=[
-                logging.FileHandler(log_dir / "talinda_pos.log"),
+                logging.FileHandler(log_dir / Path(config.LOG_FILE).name),
                 logging.StreamHandler(sys.stdout)
             ]
         )
@@ -481,9 +482,17 @@ class ApplicationManager:
         """Setup cashier closing flow."""
         def on_close_event(event):
             try:
-                closing_dialog = ClosingAmountDialog(self.main_window)
+                # Get the current open shift for this user
+                current_shift = self.login_dialog.auth_controller.session.query(Shift).filter_by(
+                    user_id=user.id, status=ShiftStatus.OPEN
+                ).first()
+                
+                closing_dialog = ClosingAmountDialog(
+                    self.main_window, 
+                    shift=current_shift, 
+                    auth_controller=self.login_dialog.auth_controller
+                )
                 if closing_dialog.exec_() == QDialog.Accepted and closing_dialog.amount is not None:
-                    self.login_dialog.auth_controller.close_shift(user, closing_dialog.amount)
                     event.accept()
                     self.app.quit()
                 else:

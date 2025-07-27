@@ -420,8 +420,8 @@ class EnhancedCartWidget(QWidget):
             font-size: 14px;
         """)
         
-        self.qty_label = QLabel("1")
-        self.qty_label.setStyleSheet("""
+        qty_label = QLabel("1")
+        qty_label.setStyleSheet("""
             font-weight: bold; 
             min-width: 35px; 
             text-align: center; 
@@ -444,7 +444,7 @@ class EnhancedCartWidget(QWidget):
         """)
         
         qty_controls.addWidget(minus_btn)
-        qty_controls.addWidget(self.qty_label)
+        qty_controls.addWidget(qty_label)
         qty_controls.addWidget(plus_btn)
         qty_layout.addLayout(qty_controls)
         
@@ -454,9 +454,9 @@ class EnhancedCartWidget(QWidget):
         total_layout = QVBoxLayout()
         total_layout.setSpacing(4)
         
-        self.item_total_label = QLabel(f"${product.price:.2f}")
-        self.item_total_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #2c3e50;")
-        total_layout.addWidget(self.item_total_label)
+        item_total_label = QLabel(f"${product.price:.2f}")
+        item_total_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #2c3e50;")
+        total_layout.addWidget(item_total_label)
         
         action_layout = QHBoxLayout()
         action_layout.setSpacing(4)
@@ -490,6 +490,10 @@ class EnhancedCartWidget(QWidget):
         total_layout.addLayout(action_layout)
         
         item_layout.addLayout(total_layout)
+        
+        # Store the labels as attributes of the item widget for later access
+        item_widget.qty_label = qty_label
+        item_widget.item_total_label = item_total_label
         
         self.cart_items[product.id] = item_widget
         self.cart_layout.addWidget(item_widget)
@@ -575,6 +579,15 @@ class EnhancedCartWidget(QWidget):
         self.discount_amount.setText(f"${discount_total:.2f}")
         self.tax_amount.setText(f"${tax_total:.2f}")
         self.total_amount.setText(f"${total_with_tax:.2f}")
+        
+        # Update button states
+        self.update_button_states()
+    
+    def update_button_states(self) -> None:
+        """Update the state of action buttons based on cart contents."""
+        has_items = bool(self.sale_controller.cart)
+        self.create_order_btn.setEnabled(has_items)
+        self.checkout_btn.setEnabled(has_items)
     
     def clear_cart(self) -> None:
         """Clear all items from the cart."""
@@ -599,8 +612,7 @@ class EnhancedCartWidget(QWidget):
             # Clear cart after saving order
             self.clear_cart()
             # Emit signal to refresh order management
-            if hasattr(self, 'order_saved'):
-                self.order_saved.emit(dialog.order)
+            self.order_saved.emit(dialog.order)
     
     def checkout(self) -> None:
         """Process the checkout."""

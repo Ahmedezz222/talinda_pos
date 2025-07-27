@@ -4,18 +4,22 @@ Controller for order management operations.
 from typing import List, Optional, Dict
 from datetime import datetime
 from sqlalchemy.orm.exc import NoResultFound
-from database.db_config import Session
+from database.db_config import Session, safe_commit, get_fresh_session
 from models.order import Order, OrderStatus
 from models.product import Product
 from models.user import User
 import uuid
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class OrderController:
     """Controller for handling order operations."""
     
     def __init__(self):
         """Initialize the order controller."""
-        self.session = Session()
+        self.session = get_fresh_session()
     
     def create_order(self, user: User, customer_name: str = None, notes: str = None) -> Order:
         """
@@ -29,20 +33,32 @@ class OrderController:
         Returns:
             Order: The created order
         """
-        # Generate unique order number
-        order_number = self._generate_order_number()
-        
-        order = Order(
-            order_number=order_number,
-            customer_name=customer_name,
-            user_id=user.id,
-            notes=notes,
-            status=OrderStatus.ACTIVE
-        )
-        
-        self.session.add(order)
-        self.session.commit()
-        return order
+        try:
+            # Generate unique order number
+            order_number = self._generate_order_number()
+            
+            order = Order(
+                order_number=order_number,
+                customer_name=customer_name,
+                user_id=user.id,
+                notes=notes,
+                status=OrderStatus.ACTIVE
+            )
+            
+            self.session.add(order)
+            
+            # Use safe commit to handle potential database locks
+            if safe_commit(self.session):
+                logger.info(f"Order created successfully: {order_number}")
+                return order
+            else:
+                logger.error("Failed to commit order creation")
+                raise Exception("Failed to create order due to database lock")
+                
+        except Exception as e:
+            logger.error(f"Error creating order: {e}")
+            self.session.rollback()
+            raise e
     
     def add_items_to_order(self, order: Order, items: List[Dict]) -> bool:
         """
@@ -75,13 +91,71 @@ class OrderController:
                 )
             
             # Update order totals
-            order.update_totals()
-            self.session.commit()
-            return True
+            self._update_order_totals(order)
+            
+            # Use safe commit to handle potential database locks
+            if safe_commit(self.session):
+                logger.info(f"Items added to order {order.order_number} successfully")
+                return True
+            else:
+                logger.error("Failed to commit items to order")
+                return False
+                
         except Exception as e:
+            logger.error(f"Error adding items to order: {e}")
             self.session.rollback()
-            print(f"Error adding items to order: {e}")
             return False
+    
+    def _update_order_totals(self, order: Order) -> None:
+        """
+        Update order totals based on items and apply any discounts/tax.
+        
+        Args:
+            order: The order to update totals for
+        """
+        try:
+            # Get order items
+            items = order.get_order_items()
+            
+            # Calculate subtotal
+            subtotal = sum(item['price'] * item['quantity'] for item in items)
+            order.subtotal = subtotal
+            
+            # Apply any existing discounts (could be set when creating order)
+            if not hasattr(order, 'discount_amount') or order.discount_amount is None:
+                order.discount_amount = 0.0
+            
+            # Calculate tax (could be based on product categories)
+            if not hasattr(order, 'tax_amount') or order.tax_amount is None:
+                order.tax_amount = 0.0
+            
+            # Calculate total
+            order.total_amount = subtotal - order.discount_amount + order.tax_amount
+            
+            # Update the order in the session
+            self.session.merge(order)
+            
+        except Exception as e:
+            logger.error(f"Error updating order totals: {e}")
+            # Set default values if calculation fails
+            order.subtotal = 0.0
+            order.discount_amount = 0.0
+            order.tax_amount = 0.0
+            order.total_amount = 0.0
+    
+    def refresh_session(self):
+        """Refresh the database session."""
+        try:
+            if safe_commit(self.session):
+                logger.debug("Session refreshed successfully")
+            else:
+                logger.warning("Failed to commit during session refresh")
+        except Exception as e:
+            logger.error(f"Error refreshing session: {e}")
+            self.session.rollback()
+            # Get a fresh session
+            self.session.close()
+            self.session = get_fresh_session()
     
     def get_active_orders(self) -> List[Order]:
         """
@@ -90,9 +164,13 @@ class OrderController:
         Returns:
             List[Order]: List of active orders
         """
-        return self.session.query(Order).filter(
-            Order.status == OrderStatus.ACTIVE
-        ).order_by(Order.created_at.desc()).all()
+        try:
+            return self.session.query(Order).filter(
+                Order.status == OrderStatus.ACTIVE
+            ).order_by(Order.created_at.desc()).all()
+        except Exception as e:
+            logger.error(f"Error getting active orders: {e}")
+            return []
     
     def get_completed_orders(self, limit: int = 50) -> List[Order]:
         """
@@ -104,9 +182,13 @@ class OrderController:
         Returns:
             List[Order]: List of completed orders
         """
-        return self.session.query(Order).filter(
-            Order.status == OrderStatus.COMPLETED
-        ).order_by(Order.completed_at.desc()).limit(limit).all()
+        try:
+            return self.session.query(Order).filter(
+                Order.status == OrderStatus.COMPLETED
+            ).order_by(Order.completed_at.desc()).limit(limit).all()
+        except Exception as e:
+            logger.error(f"Error getting completed orders: {e}")
+            return []
     
     def get_cancelled_orders(self, limit: int = 50) -> List[Order]:
         """
@@ -118,9 +200,13 @@ class OrderController:
         Returns:
             List[Order]: List of cancelled orders
         """
-        return self.session.query(Order).filter(
-            Order.status == OrderStatus.CANCELLED
-        ).order_by(Order.cancelled_at.desc()).limit(limit).all()
+        try:
+            return self.session.query(Order).filter(
+                Order.status == OrderStatus.CANCELLED
+            ).order_by(Order.cancelled_at.desc()).limit(limit).all()
+        except Exception as e:
+            logger.error(f"Error getting cancelled orders: {e}")
+            return []
     
     def get_order_by_id(self, order_id: int) -> Optional[Order]:
         """
@@ -135,6 +221,9 @@ class OrderController:
         try:
             return self.session.query(Order).filter_by(id=order_id).one()
         except NoResultFound:
+            return None
+        except Exception as e:
+            logger.error(f"Error getting order by ID {order_id}: {e}")
             return None
     
     def get_order_by_number(self, order_number: str) -> Optional[Order]:
@@ -151,6 +240,9 @@ class OrderController:
             return self.session.query(Order).filter_by(order_number=order_number).one()
         except NoResultFound:
             return None
+        except Exception as e:
+            logger.error(f"Error getting order by number {order_number}: {e}")
+            return None
     
     def complete_order(self, order: Order) -> bool:
         """
@@ -164,11 +256,15 @@ class OrderController:
         """
         try:
             order.complete_order()
-            self.session.commit()
-            return True
+            if safe_commit(self.session):
+                logger.info(f"Order {order.order_number} completed successfully")
+                return True
+            else:
+                logger.error("Failed to commit order completion")
+                return False
         except Exception as e:
+            logger.error(f"Error completing order: {e}")
             self.session.rollback()
-            print(f"Error completing order: {e}")
             return False
     
     def cancel_order(self, order: Order, user: User, reason: str = None) -> bool:
@@ -185,11 +281,15 @@ class OrderController:
         """
         try:
             order.cancel_order(user.id, reason)
-            self.session.commit()
-            return True
+            if safe_commit(self.session):
+                logger.info(f"Order {order.order_number} cancelled successfully")
+                return True
+            else:
+                logger.error("Failed to commit order cancellation")
+                return False
         except Exception as e:
+            logger.error(f"Error cancelling order: {e}")
             self.session.rollback()
-            print(f"Error cancelling order: {e}")
             return False
     
     def update_order_customer_name(self, order: Order, customer_name: str) -> bool:
@@ -206,11 +306,15 @@ class OrderController:
         try:
             order.customer_name = customer_name
             order.updated_at = datetime.utcnow()
-            self.session.commit()
-            return True
+            if safe_commit(self.session):
+                logger.info(f"Order {order.order_number} customer name updated")
+                return True
+            else:
+                logger.error("Failed to commit customer name update")
+                return False
         except Exception as e:
+            logger.error(f"Error updating order customer name: {e}")
             self.session.rollback()
-            print(f"Error updating order customer name: {e}")
             return False
     
     def update_order_notes(self, order: Order, notes: str) -> bool:
@@ -227,11 +331,15 @@ class OrderController:
         try:
             order.notes = notes
             order.updated_at = datetime.utcnow()
-            self.session.commit()
-            return True
+            if safe_commit(self.session):
+                logger.info(f"Order {order.order_number} notes updated")
+                return True
+            else:
+                logger.error("Failed to commit notes update")
+                return False
         except Exception as e:
+            logger.error(f"Error updating order notes: {e}")
             self.session.rollback()
-            print(f"Error updating order notes: {e}")
             return False
     
     def get_orders_by_status(self, status: OrderStatus, limit: int = 50) -> List[Order]:
@@ -245,9 +353,13 @@ class OrderController:
         Returns:
             List[Order]: List of orders with the specified status
         """
-        return self.session.query(Order).filter(
-            Order.status == status
-        ).order_by(Order.updated_at.desc()).limit(limit).all()
+        try:
+            return self.session.query(Order).filter(
+                Order.status == status
+            ).order_by(Order.updated_at.desc()).limit(limit).all()
+        except Exception as e:
+            logger.error(f"Error getting orders by status {status}: {e}")
+            return []
     
     def get_orders_by_date_range(self, start_date: datetime, end_date: datetime) -> List[Order]:
         """
@@ -260,10 +372,14 @@ class OrderController:
         Returns:
             List[Order]: List of orders within the date range
         """
-        return self.session.query(Order).filter(
-            Order.created_at >= start_date,
-            Order.created_at <= end_date
-        ).order_by(Order.created_at.desc()).all()
+        try:
+            return self.session.query(Order).filter(
+                Order.created_at >= start_date,
+                Order.created_at <= end_date
+            ).order_by(Order.created_at.desc()).all()
+        except Exception as e:
+            logger.error(f"Error getting orders by date range: {e}")
+            return []
     
     def _generate_order_number(self) -> str:
         """
@@ -287,4 +403,7 @@ class OrderController:
     def __del__(self):
         """Clean up the session."""
         if hasattr(self, 'session'):
-            self.session.close() 
+            try:
+                self.session.close()
+            except Exception as e:
+                logger.error(f"Error closing session: {e}") 

@@ -44,7 +44,7 @@ from ui.components.product_card import ProductCard
 from ui.components.add_product_page import AddProductPage
 from ui.components.order_widget import OrderManagementWidget
 from ui.components.closing_amount_dialog import ClosingAmountDialog
-from ui.components import ShowProductsWindow, SalesReportWindow
+from ui.components import ShowProductsWindow
 from models.user import UserRole, User
 
 
@@ -350,6 +350,9 @@ class ModernPOSWidget(QWidget):
             self.cart_widget.product_added.connect(self.on_product_added)
         if hasattr(self.cart_widget, 'product_removed'):
             self.cart_widget.product_removed.connect(self.on_product_removed)
+        # Connect order saved signal to refresh order management
+        if hasattr(self.cart_widget, 'order_saved'):
+            self.cart_widget.order_saved.connect(self.on_order_saved)
     
     def load_data(self):
         """Load categories and products."""
@@ -485,6 +488,8 @@ class ModernPOSWidget(QWidget):
         for product in products:
             try:
                 card = ProductCard(product)
+                # Connect the product_selected signal to the cart widget
+                card.product_selected.connect(self.cart_widget.add_item)
                 self.products_layout.addWidget(card, row, col)
                 self.product_cards[product.id] = card
                 
@@ -521,6 +526,17 @@ class ModernPOSWidget(QWidget):
     def on_product_removed(self, product_id: int):
         """Handle product removed from cart."""
         self.logger.info(f"Product {product_id} removed from cart")
+    
+    def on_order_saved(self, order):
+        """Handle order saved signal from cart widget."""
+        self.logger.info(f"Order saved from POS widget: {order.order_number}")
+        # Forward the signal to the main window if it exists
+        if hasattr(self, 'parent') and self.parent():
+            main_window = self.parent()
+            while main_window and not hasattr(main_window, 'on_order_saved'):
+                main_window = main_window.parent()
+            if main_window and hasattr(main_window, 'on_order_saved'):
+                main_window.on_order_saved(order)
     
     def resizeEvent(self, event):
         """Handle resize events for responsive design."""
@@ -956,7 +972,6 @@ class ModernMainWindow(QMainWindow):
                 ("⚙️ Admin Panel", "User and system management"),
                 ("➕ Add Product", "Add new products to inventory"),
                 ("📦 Show Products", "View and manage products"),
-                ("📊 Sales Report", "View sales analytics and reports"),
             ])
         
         for text, tooltip in menu_items:
@@ -1079,11 +1094,14 @@ class ModernMainWindow(QMainWindow):
     
     def setup_connections(self):
         """Setup signal connections."""
-        # Connect cart signals if available
+        # Connect cart signals
         if hasattr(self.pos_widget, 'cart_widget'):
             cart = self.pos_widget.cart_widget
             if hasattr(cart, 'sale_completed'):
                 cart.sale_completed.connect(self.on_sale_completed)
+        # Connect order saved signal to refresh order management
+        if hasattr(self.pos_widget.cart_widget, 'order_saved'):
+            self.pos_widget.cart_widget.order_saved.connect(self.on_order_saved)
     
     def switch_page(self, index):
         """Switch to the specified page."""
@@ -1100,9 +1118,6 @@ class ModernMainWindow(QMainWindow):
                 elif index == 4:  # Show Products
                     self.show_products_window()
                     return
-                elif index == 5:  # Sales Report
-                    self.show_sales_report()
-                    return
         except Exception as e:
             self.logger.error(f"Error switching page: {str(e)}")
             QMessageBox.warning(self, "Error", f"Failed to switch page: {str(e)}")
@@ -1116,17 +1131,7 @@ class ModernMainWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"Failed to show products: {str(e)}")
             QMessageBox.warning(self, "Error", f"Failed to show products: {str(e)}")
-    
-    def show_sales_report(self):
-        """Show the sales report window."""
-        try:
-            dialog = SalesReportWindow(self.user, self)
-            dialog.exec_()
-            self.sidebar.setCurrentRow(2)  # Go back to Admin Panel
-        except Exception as e:
-            self.logger.error(f"Failed to show sales report: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to show sales report: {str(e)}")
-    
+
     def handle_add_product(self, product_data):
         """Handle product addition."""
         try:
@@ -1149,8 +1154,16 @@ class ModernMainWindow(QMainWindow):
     
     def on_sale_completed(self, sale_data):
         """Handle sale completion."""
-        self.logger.info(f"Sale completed: {sale_data}")
+        self.logger.info("Sale completed")
         QMessageBox.information(self, "Success", "Sale completed successfully!")
+    
+    def on_order_saved(self, order):
+        """Handle order saved signal from cart widget."""
+        self.logger.info(f"Order saved: {order.order_number}")
+        # Refresh the order management widget to show the latest order
+        if hasattr(self, 'order_management_widget') and self.order_management_widget:
+            self.order_management_widget.refresh_orders()
+        QMessageBox.information(self, "Success", f"Order {order.order_number} saved successfully!")
     
     def show_about(self):
         """Show about dialog."""

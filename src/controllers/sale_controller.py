@@ -1,15 +1,19 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 """
 Controller for sales and transaction operations.
 """
 from typing import Optional, Dict, cast # type: ignore
 from typing import Optional, Dict
 from datetime import datetime, timezone
-from database.db_config import Session
+from database.db_config import Session, safe_commit, get_fresh_session
 from models.sale import Sale, sale_products
 from models.product import Product
 from models.user import User
 from sqlalchemy import update
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class CartItem:
     """Class representing an item in the shopping cart."""
@@ -42,7 +46,7 @@ class SaleController:
     
     def __init__(self):
         """Initialize the sale controller."""
-        self.session = Session()
+        self.session = get_fresh_session()
         self.cart: Dict[int, CartItem] = {}
         self.current_user: Optional[User] = None
         self.cart_discount_percentage: float = 0.0  # Cart-wide discount percentage
@@ -65,7 +69,9 @@ class SaleController:
                 self.cart[product_id].quantity += quantity
             else:
                 self.cart[product_id] = CartItem(product, quantity)
+            logger.debug(f"Added {quantity} of {product.name} to cart")
             return True
+        logger.warning(f"Insufficient stock for {product.name}: {current_stock} available, {quantity} requested")
         return False
     
     def remove_from_cart(self, product_id: int) -> None:
@@ -76,7 +82,9 @@ class SaleController:
             product_id: ID of the product to remove
         """
         if product_id in self.cart:
+            product_name = self.cart[product_id].product.name
             del self.cart[product_id]
+            logger.debug(f"Removed {product_name} from cart")
     
     def update_quantity(self, product_id: int, quantity: int) -> bool:
         """
@@ -93,6 +101,7 @@ class SaleController:
             current_stock = int(getattr(product, 'stock', 0))
             if current_stock >= quantity:
                 self.cart[product_id].quantity = quantity
+                logger.debug(f"Updated quantity of {product.name} to {quantity}")
                 return True
         return False
     
@@ -110,6 +119,7 @@ class SaleController:
         if product_id in self.cart:
             self.cart[product_id].discount_percentage = max(0.0, min(100.0, discount_percentage))
             self.cart[product_id].discount_amount = max(0.0, discount_amount)
+            logger.debug(f"Applied discount to product {product_id}")
             return True
         return False
     
@@ -123,6 +133,7 @@ class SaleController:
         """
         self.cart_discount_percentage = max(0.0, min(100.0, discount_percentage))
         self.cart_discount_amount = max(0.0, discount_amount)
+        logger.debug(f"Applied cart-wide discount: {discount_percentage}% + ${discount_amount}")
     
     def get_cart_subtotal(self) -> float:
         """
@@ -135,130 +146,289 @@ class SaleController:
     
     def get_cart_discount_total(self) -> float:
         """
-        Calculate the total discount amount for the cart.
+        Calculate the total discount for the cart.
         
         Returns:
             float: Total discount amount
         """
+        # Item-level discounts
         item_discounts = sum(item.discount_total for item in self.cart.values())
-        subtotal = self.get_cart_subtotal()
-        cart_percentage_discount = subtotal * (self.cart_discount_percentage / 100)
-        return item_discounts + cart_percentage_discount + self.cart_discount_amount
+        
+        # Cart-level discounts
+        cart_subtotal = self.get_cart_subtotal()
+        cart_percentage_discount = cart_subtotal * (self.cart_discount_percentage / 100)
+        cart_total_discount = cart_percentage_discount + self.cart_discount_amount
+        
+        return item_discounts + cart_total_discount
     
     def get_cart_total(self) -> float:
         """
-        Calculate the total price of items in the cart (after all discounts).
+        Calculate the total price for the cart (after all discounts).
         
         Returns:
             float: Total price
         """
-        subtotal = self.get_cart_subtotal()
-        discount_total = self.get_cart_discount_total()
-        return max(0.0, subtotal - discount_total)
-    
+        return self.get_cart_subtotal() - self.get_cart_discount_total()
+
     def get_cart_tax_total(self) -> float:
         """
-        Calculate the total tax amount for all items in the cart based on their category tax rates.
+        Calculate the total tax for the cart based on product categories.
         
         Returns:
             float: Total tax amount
         """
-        total_tax = 0.0
-        for cart_item in self.cart.values():
-            product = cart_item.product
-            # Get the category's tax rate
-            if hasattr(product, 'category') and product.category:
-                tax_rate = getattr(product.category, 'tax_rate', 0.0)
-                # Calculate tax on the item's total (after item discounts)
-                item_total = cart_item.total
-                item_tax = item_total * (tax_rate / 100.0)
-                total_tax += item_tax
-        return total_tax
-    
+        try:
+            total_tax = 0.0
+            for cart_item in self.cart.values():
+                product = cart_item.product
+                if hasattr(product, 'category') and product.category:
+                    tax_rate = getattr(product.category, 'tax_rate', 0.0)
+                    item_total = cart_item.total  # After item discounts
+                    item_tax = item_total * (tax_rate / 100.0)
+                    total_tax += item_tax
+            
+            # Apply cart-level discount to tax calculation
+            if self.cart_discount_percentage > 0 or self.cart_discount_amount > 0:
+                # Recalculate tax based on final cart total
+                cart_subtotal = self.get_cart_subtotal()
+                cart_discount = self.get_cart_discount_total()
+                discount_ratio = cart_discount / cart_subtotal if cart_subtotal > 0 else 0
+                total_tax *= (1 - discount_ratio)
+            
+            return total_tax
+        except Exception as e:
+            logger.error(f"Error calculating cart tax: {e}")
+            return 0.0
+
     def get_cart_total_with_tax(self) -> float:
         """
-        Calculate the total price of items in the cart including tax (after all discounts).
+        Calculate the total price for the cart including tax.
         
         Returns:
-            float: Total price including tax
+            float: Total price with tax
         """
-        total_before_tax = self.get_cart_total()
-        tax_total = self.get_cart_tax_total()
-        return total_before_tax + tax_total
-    
+        return self.get_cart_total() + self.get_cart_tax_total()
+
+    def load_order_to_cart(self, order) -> bool:
+        """
+        Load an order's items into the cart.
+        
+        Args:
+            order: Order object to load into cart
+            
+        Returns:
+            bool: True if loaded successfully, False otherwise
+        """
+        try:
+            # Clear current cart first
+            self.clear_cart()
+            
+            # Get order items
+            order_items = order.get_order_items()
+            
+            # Add each item to cart
+            for item in order_items:
+                product = item['product']
+                quantity = item['quantity']
+                
+                # Check if product still exists and has sufficient stock
+                current_product = self.session.query(Product).filter_by(id=product.id).first()
+                if not current_product:
+                    logger.warning(f"Product {product.name} (ID: {product.id}) no longer exists")
+                    continue
+                
+                if current_product.stock < quantity:
+                    logger.warning(f"Insufficient stock for {current_product.name}: {current_product.stock} available, {quantity} needed")
+                    # Add what's available
+                    quantity = current_product.stock
+                
+                if quantity > 0:
+                    # Add to cart with the original price from the order
+                    cart_item = CartItem(current_product, quantity)
+                    cart_item.price = item['price']  # Use the price from the order
+                    self.cart[current_product.id] = cart_item
+                    logger.info(f"Added {quantity} of {current_product.name} to cart from order")
+            
+            logger.info(f"Loaded {len(self.cart)} items from order {order.order_number}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error loading order to cart: {e}")
+            self.clear_cart()  # Clear cart on error
+            return False
+
+    def complete_sale(self, user) -> bool:
+        """
+        Complete a sale from the current cart.
+        
+        Args:
+            user: User object who is completing the sale
+            
+        Returns:
+            bool: True if sale completed successfully, False otherwise
+        """
+        try:
+            if not self.cart:
+                logger.warning("Cannot complete sale with empty cart")
+                return False
+            
+            # Process the sale using the existing process_sale method
+            sale = self.process_sale()
+            
+            if sale:
+                logger.info(f"Sale completed successfully by user {user.id}")
+                return True
+            else:
+                logger.error("Failed to process sale")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error completing sale: {e}")
+            return False
+
     def clear_cart(self) -> None:
         """Clear all items from the cart."""
         self.cart.clear()
         self.cart_discount_percentage = 0.0
         self.cart_discount_amount = 0.0
+        logger.debug("Cart cleared")
     
-    def load_order_to_cart(self, order) -> None:
+    def process_sale(self, payment_method: str = "cash") -> Optional[Sale]:
         """
-        Load order items into the cart.
+        Process the current cart as a sale.
         
         Args:
-            order: The order to load into cart
-        """
-        # Clear current cart
-        self.clear_cart()
-        
-        # Load order items
-        order_items = order.get_order_items()
-        for item in order_items:
-            # Re-attach the product to the current session to avoid detached instance errors
-            product = item['product']
-            if product.id:
-                # Get the product from the current session to ensure it's attached
-                attached_product = self.session.query(Product).filter_by(id=product.id).first()
-                if attached_product:
-                    self.add_to_cart(attached_product, item['quantity'])
-    
-    def complete_sale(self, user: User) -> bool:
-        """
-        Complete the sale transaction.
-        
-        Args:
-            user: The user completing the sale
+            payment_method: Method of payment (cash, card, etc.)
+            
         Returns:
-            bool: True if sale completed successfully, False otherwise
+            Optional[Sale]: The created sale if successful, None otherwise
         """
+        if not self.current_user:
+            logger.error("No current user for sale processing")
+            return None
+        
         if not self.cart:
-            return False
+            logger.warning("Cannot process sale with empty cart")
+            return None
+        
         try:
+            # Create the sale record
+            total_amount = self.get_cart_total()
             sale = Sale(
-                total_amount=self.get_cart_total_with_tax(),
-                user_id=int(getattr(user, 'id', 0)),
-                timestamp=datetime.now(timezone.utc)
+                total_amount=total_amount,
+                user_id=self.current_user.id
             )
+            
             self.session.add(sale)
-            for cart_item in self.cart.values():
-                product = cart_item.product
-                # Update product stock using SQLAlchemy update
-                self.session.execute(
-                    update(Product)
-                    .where(Product.id == int(getattr(product, 'id', 0)))
-                    .values(stock=int(getattr(product, 'stock', 0)) - cart_item.quantity)
-                )
+            
+            # Add products to the sale
+            for product_id, cart_item in self.cart.items():
                 # Add to sale_products table
                 self.session.execute(
                     sale_products.insert().values(
                         sale_id=sale.id,
-                        product_id=int(getattr(product, 'id', 0)),
+                        product_id=product_id,
                         quantity=cart_item.quantity,
                         price_at_sale=cart_item.price
                     )
                 )
-            self.session.commit()
-            self.clear_cart()
-            return True
-        except Exception:
+                
+                # Update product stock
+                product = cart_item.product
+                new_stock = int(getattr(product, 'stock', 0)) - cart_item.quantity
+                if new_stock < 0:
+                    logger.error(f"Insufficient stock for {product.name}")
+                    self.session.rollback()
+                    return None
+                
+                # Update stock in database
+                self.session.execute(
+                    update(Product).where(Product.id == product_id).values(stock=new_stock)
+                )
+            
+            # Commit the transaction
+            if safe_commit(self.session):
+                logger.info(f"Sale processed successfully: ${total_amount:.2f}")
+                # Clear the cart after successful sale
+                self.clear_cart()
+                return sale
+            else:
+                logger.error("Failed to commit sale transaction")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error processing sale: {e}")
+            self.session.rollback()
+            return None
+    
+    def get_sales_history(self, limit: int = 50) -> List[Sale]:
+        """
+        Get recent sales history.
+        
+        Args:
+            limit: Maximum number of sales to return
+            
+        Returns:
+            List[Sale]: List of recent sales
+        """
+        try:
+            return self.session.query(Sale).order_by(Sale.timestamp.desc()).limit(limit).all()
+        except Exception as e:
+            logger.error(f"Error getting sales history: {e}")
+            return []
+
+    def delete_sale(self, sale_id: int) -> bool:
+        """
+        Delete a sale and restore product stock.
+        
+        Args:
+            sale_id: ID of the sale to delete
+            
+        Returns:
+            bool: True if deletion successful, False otherwise
+        """
+        try:
+            # Get the sale with its products
+            sale = self.session.query(Sale).filter_by(id=sale_id).first()
+            if not sale:
+                logger.warning(f"Sale not found for deletion: {sale_id}")
+                return False
+            
+            # Get the products in this sale
+            sale_products_data = self.session.execute(
+                sale_products.select().where(sale_products.c.sale_id == sale_id)
+            ).fetchall()
+            
+            # Restore stock for each product
+            for sale_product in sale_products_data:
+                product_id = sale_product.product_id
+                quantity = sale_product.quantity
+                
+                # Update product stock
+                product = self.session.query(Product).filter_by(id=product_id).first()
+                if product:
+                    product.stock += quantity
+                    logger.info(f"Restored {quantity} units to product {product.name} (ID: {product_id})")
+            
+            # Delete the sale
+            self.session.delete(sale)
+            
+            if safe_commit(self.session):
+                logger.info(f"Sale {sale_id} deleted successfully")
+                return True
+            else:
+                logger.error("Failed to commit sale deletion")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error deleting sale {sale_id}: {e}")
             self.session.rollback()
             return False
 
-    def get_sales_for_shift(self, user):
-        """Return all sales for the user's current open shift."""
-        from models.user import Shift, ShiftStatus
-        shift = self.session.query(Shift).filter_by(user_id=user.id, status=ShiftStatus.OPEN).first()
-        if not shift:
-            return []
-        return self.session.query(Sale).filter_by(user_id=user.id, shift_id=shift.id).all()
+    def __del__(self):
+        """Clean up the session."""
+        if hasattr(self, 'session'):
+            try:
+                self.session.close()
+            except Exception as e:
+                logger.error(f"Error closing session: {e}")

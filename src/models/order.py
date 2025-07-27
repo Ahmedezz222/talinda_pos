@@ -4,10 +4,14 @@ Models for order management and tracking.
 from datetime import datetime
 from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, String, Enum, Text, Table, text
 from sqlalchemy.orm import relationship
-from database.db_config import Base
+from database.db_config import Base, get_fresh_session, safe_commit
 from models.product import Product
 from models.user import User
 import enum
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class OrderStatus(enum.Enum):
     """Enum for order status."""
@@ -63,8 +67,7 @@ class Order(Base):
     
     def get_order_items(self):
         """Get order items with quantities and prices."""
-        from database.db_config import Session
-        session = Session()
+        session = get_fresh_session()
         try:
             # Get order items from the association table using SQLAlchemy
             from models.order import order_products
@@ -82,29 +85,48 @@ class Order(Base):
                         'notes': row.notes
                     })
             return items
+        except Exception as e:
+            logger.error(f"Error getting order items: {e}")
+            return []
         finally:
             session.close()
     
     def update_totals(self):
         """Update order totals based on items."""
-        items = self.get_order_items()
-        self.subtotal = sum(item['price'] * item['quantity'] for item in items)
-        # Apply any discounts and tax calculations here
-        self.total_amount = self.subtotal - self.discount_amount + self.tax_amount
+        try:
+            items = self.get_order_items()
+            self.subtotal = sum(item['price'] * item['quantity'] for item in items)
+            # Apply any discounts and tax calculations here
+            self.total_amount = self.subtotal - self.discount_amount + self.tax_amount
+        except Exception as e:
+            logger.error(f"Error updating order totals: {e}")
+            # Set default values if calculation fails
+            self.subtotal = 0.0
+            self.discount_amount = 0.0
+            self.tax_amount = 0.0
+            self.total_amount = 0.0
     
     def complete_order(self):
         """Mark order as completed."""
-        self.status = OrderStatus.COMPLETED
-        self.completed_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        try:
+            self.status = OrderStatus.COMPLETED
+            self.completed_at = datetime.utcnow()
+            self.updated_at = datetime.utcnow()
+            logger.info(f"Order {self.order_number} marked as completed")
+        except Exception as e:
+            logger.error(f"Error completing order: {e}")
     
     def cancel_order(self, user_id, reason=None):
         """Cancel the order."""
-        self.status = OrderStatus.CANCELLED
-        self.cancelled_at = datetime.utcnow()
-        self.cancelled_by = user_id
-        self.cancelled_reason = reason
-        self.updated_at = datetime.utcnow()
+        try:
+            self.status = OrderStatus.CANCELLED
+            self.cancelled_at = datetime.utcnow()
+            self.cancelled_by = user_id
+            self.cancelled_reason = reason
+            self.updated_at = datetime.utcnow()
+            logger.info(f"Order {self.order_number} cancelled by user {user_id}")
+        except Exception as e:
+            logger.error(f"Error cancelling order: {e}")
     
     def get_status_display(self):
         """Get human-readable status."""
