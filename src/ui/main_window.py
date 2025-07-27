@@ -150,14 +150,14 @@ class ModernPOSWidget(QWidget):
             color: white;
         """)
         
-        subtitle = QLabel(f"Welcome, {self.user.username} ({self.user.role.value.title()})")
-        subtitle.setStyleSheet("""
+        self.subtitle = QLabel(f"Welcome, {self.user.username} ({self.user.role.value.title()})")
+        self.subtitle.setStyleSheet("""
             font-size: 12px;
             color: rgba(255, 255, 255, 0.8);
         """)
         
         title_layout.addWidget(title)
-        title_layout.addWidget(subtitle)
+        title_layout.addWidget(self.subtitle)
         layout.addLayout(title_layout)
         
         layout.addStretch()
@@ -361,19 +361,11 @@ class ModernPOSWidget(QWidget):
     
     def show_categories(self):
         """Show categories as clickable items."""
-        # Clear existing items
-        for widget in self.category_buttons.values():
-            widget.deleteLater()
-        self.category_buttons.clear()
+        # Clear existing items safely
+        self.clear_all_widgets()
         
-        for widget in self.product_cards.values():
-            widget.deleteLater()
-        self.product_cards.clear()
-        
-        while self.products_layout.count():
-            item = self.products_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        # Update header
+        self.subtitle.setText(f"Welcome, {self.user.username} ({self.user.role.value.title()}) - Browse Categories")
         
         try:
             categories = self.product_controller.get_categories()
@@ -462,15 +454,8 @@ class ModernPOSWidget(QWidget):
     
     def load_products(self):
         """Load and display products in a responsive grid."""
-        # Clear existing products
-        for widget in self.product_cards.values():
-            widget.deleteLater()
-        self.product_cards.clear()
-        
-        while self.products_layout.count():
-            item = self.products_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        # Clear existing products safely
+        self.clear_all_widgets()
         
         try:
             if self.current_category:
@@ -514,6 +499,9 @@ class ModernPOSWidget(QWidget):
     def select_category(self, category_name: str):
         """Handle category selection and show products."""
         self.current_category = category_name
+        
+        # Update header
+        self.subtitle.setText(f"Welcome, {self.user.username} ({self.user.role.value.title()}) - {category_name}")
         
         # Show back button
         self.back_btn.show()
@@ -566,6 +554,39 @@ class ModernPOSWidget(QWidget):
             return f"#{darkened[0]:02x}{darkened[1]:02x}{darkened[2]:02x}"
         except:
             return color
+
+    def clear_all_widgets(self):
+        """Safely clear all widgets from the products layout."""
+        # Disconnect signals from stored widgets before clearing
+        for btn in self.category_buttons.values():
+            if btn and not btn.isHidden():
+                try:
+                    btn.clicked.disconnect()
+                except (TypeError, RuntimeError):
+                    pass  # Signal already disconnected
+        
+        for card in self.product_cards.values():
+            if card and not card.isHidden():
+                try:
+                    # Disconnect any signals from product cards
+                    card.deleteLater()
+                except (TypeError, RuntimeError):
+                    pass  # Widget already deleted
+        
+        # Clear stored references
+        self.category_buttons.clear()
+        self.product_cards.clear()
+        
+        # Clear layout safely
+        while self.products_layout.count():
+            item = self.products_layout.takeAt(0)
+            if item.widget():
+                widget = item.widget()
+                try:
+                    widget.setParent(None)
+                    widget.deleteLater()
+                except (TypeError, RuntimeError):
+                    pass  # Widget already deleted or invalid
 
 
 class ModernAdminPanelWidget(QWidget):
