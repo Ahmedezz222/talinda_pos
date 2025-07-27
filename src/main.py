@@ -482,10 +482,28 @@ class ApplicationManager:
         """Setup cashier closing flow."""
         def on_close_event(event):
             try:
+                # Get a fresh session to ensure we can find the shift
+                from database.db_config import get_fresh_session
+                fresh_session = get_fresh_session()
+                
                 # Get the current open shift for this user
-                current_shift = self.login_dialog.auth_controller.session.query(Shift).filter_by(
+                current_shift = fresh_session.query(Shift).filter_by(
                     user_id=user.id, status=ShiftStatus.OPEN
                 ).first()
+                
+                if not current_shift:
+                    self.logger.warning(f"No open shift found for user {user.username}")
+                    # Show a simple message and close
+                    from PyQt5.QtWidgets import QMessageBox
+                    QMessageBox.information(
+                        self.main_window,
+                        "No Active Shift",
+                        f"No active shift found for {user.username}. Closing application."
+                    )
+                    event.accept()
+                    self.app.quit()
+                    fresh_session.close()
+                    return
                 
                 closing_dialog = ClosingAmountDialog(
                     self.main_window, 
@@ -497,6 +515,9 @@ class ApplicationManager:
                     self.app.quit()
                 else:
                     event.ignore()
+                    
+                # Close the fresh session
+                fresh_session.close()
             except Exception as e:
                 self.logger.error(f"Closing dialog error: {str(e)}")
                 event.accept()

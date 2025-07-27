@@ -25,20 +25,28 @@ from models.sale import Sale, sale_products
 from models.product import Product
 from sqlalchemy import func, and_
 
+logger = logging.getLogger(__name__)
+
 try:
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.worksheet import Worksheet
     EXCEL_AVAILABLE = True
-except ImportError:
+    logger.info("openpyxl successfully imported - Excel functionality available")
+except ImportError as e:
     EXCEL_AVAILABLE = False
     # Define a dummy Worksheet class for type hints when openpyxl is not available
     class Worksheet:
         pass
-    logging.warning("openpyxl not available. Excel reports will not be generated.")
-
-logger = logging.getLogger(__name__)
+    logger.error(f"openpyxl import failed: {e}. Excel reports will not be generated.")
+    logger.error("To fix this, install openpyxl: pip install openpyxl")
+except Exception as e:
+    EXCEL_AVAILABLE = False
+    # Define a dummy Worksheet class for type hints when openpyxl is not available
+    class Worksheet:
+        pass
+    logger.error(f"Unexpected error importing openpyxl: {e}. Excel reports will not be generated.")
 
 
 class ExcelReportGenerator:
@@ -50,17 +58,36 @@ class ExcelReportGenerator:
         self.reports_dir = Path("reports")
         self.reports_dir.mkdir(exist_ok=True)
         
-        # Excel styling constants
-        self.header_font = Font(bold=True, size=12, color="FFFFFF")
-        self.header_fill = PatternFill(start_color="1976D2", end_color="1976D2", fill_type="solid")
-        self.subheader_font = Font(bold=True, size=11, color="2C3E50")
-        self.subheader_fill = PatternFill(start_color="ECF0F1", end_color="ECF0F1", fill_type="solid")
-        self.border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
+        # Excel styling constants - only initialize if openpyxl is available
+        if EXCEL_AVAILABLE:
+            try:
+                self.header_font = Font(bold=True, size=12, color="FFFFFF")
+                self.header_fill = PatternFill(start_color="1976D2", end_color="1976D2", fill_type="solid")
+                self.subheader_font = Font(bold=True, size=11, color="2C3E50")
+                self.subheader_fill = PatternFill(start_color="ECF0F1", end_color="ECF0F1", fill_type="solid")
+                self.border = Border(
+                    left=Side(style='thin'),
+                    right=Side(style='thin'),
+                    top=Side(style='thin'),
+                    bottom=Side(style='thin')
+                )
+                logger.debug("Excel styling constants initialized successfully")
+            except Exception as e:
+                logger.error(f"Error initializing Excel styling constants: {e}")
+                # Set to None if styling initialization fails
+                self.header_font = None
+                self.header_fill = None
+                self.subheader_font = None
+                self.subheader_fill = None
+                self.border = None
+        else:
+            # Set to None when openpyxl is not available
+            self.header_font = None
+            self.header_fill = None
+            self.subheader_font = None
+            self.subheader_fill = None
+            self.border = None
+            logger.warning("Excel styling constants not initialized - openpyxl not available")
     
     def generate_shift_report(self, shift: Shift, closing_amount: float) -> Optional[str]:
         """
@@ -80,8 +107,13 @@ class ExcelReportGenerator:
         # Additional check to ensure openpyxl is properly imported
         try:
             import openpyxl
-        except ImportError:
-            logger.error("openpyxl import failed. Please reinstall: pip install openpyxl")
+            logger.debug("openpyxl import check passed")
+        except ImportError as e:
+            logger.error(f"openpyxl import failed during report generation: {e}")
+            logger.error("Please reinstall openpyxl: pip install openpyxl")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error during openpyxl import check: {e}")
             return None
         
         try:
@@ -134,6 +166,9 @@ class ExcelReportGenerator:
     
     def _create_header(self, ws: Union[Worksheet, object], shift: Shift):
         """Create the report header."""
+        if not EXCEL_AVAILABLE:
+            return
+            
         # Company title
         ws['A1'] = "TALINDA POS SYSTEM"
         ws['A1'].font = Font(bold=True, size=16, color="1976D2")
@@ -148,7 +183,8 @@ class ExcelReportGenerator:
         
         # Shift information
         ws['A4'] = "Shift Details:"
-        ws['A4'].font = self.subheader_font
+        if self.subheader_font:
+            ws['A4'].font = self.subheader_font
         
         ws['A5'] = f"Cashier: {shift.user.full_name or shift.user.username}"
         ws['B5'] = f"User ID: {shift.user_id}"
@@ -166,11 +202,16 @@ class ExcelReportGenerator:
     
     def _create_shift_summary(self, ws: Union[Worksheet, object], shift: Shift, closing_amount: float):
         """Create the shift summary section."""
+        if not EXCEL_AVAILABLE:
+            return
+            
         # Section header
         row = 12
         ws[f'A{row}'] = "SHIFT SUMMARY"
-        ws[f'A{row}'].font = self.header_font
-        ws[f'A{row}'].fill = self.header_fill
+        if self.header_font:
+            ws[f'A{row}'].font = self.header_font
+        if self.header_fill:
+            ws[f'A{row}'].fill = self.header_fill
         ws.merge_cells(f'A{row}:H{row}')
         ws[f'A{row}'].alignment = Alignment(horizontal='center')
         
@@ -211,11 +252,16 @@ class ExcelReportGenerator:
     
     def _create_sales_summary(self, ws: Union[Worksheet, object], shift: Shift):
         """Create the sales summary section."""
+        if not EXCEL_AVAILABLE:
+            return
+            
         # Section header
         row = 22
         ws[f'A{row}'] = "SALES SUMMARY"
-        ws[f'A{row}'].font = self.header_font
-        ws[f'A{row}'].fill = self.header_fill
+        if self.header_font:
+            ws[f'A{row}'].font = self.header_font
+        if self.header_fill:
+            ws[f'A{row}'].fill = self.header_fill
         ws.merge_cells(f'A{row}:H{row}')
         ws[f'A{row}'].alignment = Alignment(horizontal='center')
         
@@ -243,11 +289,16 @@ class ExcelReportGenerator:
     
     def _create_detailed_sales(self, ws: Union[Worksheet, object], shift: Shift):
         """Create the detailed sales section."""
+        if not EXCEL_AVAILABLE:
+            return
+            
         # Section header
         row = 30
         ws[f'A{row}'] = "DETAILED SALES"
-        ws[f'A{row}'].font = self.header_font
-        ws[f'A{row}'].fill = self.header_fill
+        if self.header_font:
+            ws[f'A{row}'].font = self.header_font
+        if self.header_fill:
+            ws[f'A{row}'].fill = self.header_fill
         ws.merge_cells(f'A{row}:H{row}')
         ws[f'A{row}'].alignment = Alignment(horizontal='center')
         
@@ -256,9 +307,12 @@ class ExcelReportGenerator:
         headers = ['Sale ID', 'Time', 'Items', 'Total Amount', 'Cashier']
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=row, column=col, value=header)
-            cell.font = self.subheader_font
-            cell.fill = self.subheader_fill
-            cell.border = self.border
+            if self.subheader_font:
+                cell.font = self.subheader_font
+            if self.subheader_fill:
+                cell.fill = self.subheader_fill
+            if self.border:
+                cell.border = self.border
             cell.alignment = Alignment(horizontal='center')
         
         # Get sales data
@@ -274,16 +328,22 @@ class ExcelReportGenerator:
             ws.cell(row=row, column=5, value=sale['cashier_name'])
             
             # Apply borders to all cells in the row
-            for col in range(1, 6):
-                ws.cell(row=row, column=col).border = self.border
+            if self.border:
+                for col in range(1, 6):
+                    ws.cell(row=row, column=col).border = self.border
     
     def _create_product_summary(self, ws: Union[Worksheet, object], shift: Shift):
         """Create the product summary section."""
+        if not EXCEL_AVAILABLE:
+            return
+            
         # Section header
         row = 35 + len(self._get_shift_sales_data(shift))  # Start after detailed sales
         ws[f'A{row}'] = "PRODUCT SUMMARY"
-        ws[f'A{row}'].font = self.header_font
-        ws[f'A{row}'].fill = self.header_fill
+        if self.header_font:
+            ws[f'A{row}'].font = self.header_font
+        if self.header_fill:
+            ws[f'A{row}'].fill = self.header_fill
         ws.merge_cells(f'A{row}:H{row}')
         ws[f'A{row}'].alignment = Alignment(horizontal='center')
         
@@ -292,9 +352,12 @@ class ExcelReportGenerator:
         headers = ['Product Name', 'Category', 'Quantity Sold', 'Unit Price', 'Total Revenue']
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=row, column=col, value=header)
-            cell.font = self.subheader_font
-            cell.fill = self.subheader_fill
-            cell.border = self.border
+            if self.subheader_font:
+                cell.font = self.subheader_font
+            if self.subheader_fill:
+                cell.fill = self.subheader_fill
+            if self.border:
+                cell.border = self.border
             cell.alignment = Alignment(horizontal='center')
         
         # Get product sales data
@@ -310,8 +373,9 @@ class ExcelReportGenerator:
             ws.cell(row=row, column=5, value=f"${product['total_revenue']:.2f}")
             
             # Apply borders to all cells in the row
-            for col in range(1, 6):
-                ws.cell(row=row, column=col).border = self.border
+            if self.border:
+                for col in range(1, 6):
+                    ws.cell(row=row, column=col).border = self.border
     
     def _get_shift_total_sales(self, shift: Shift) -> float:
         """Get total sales amount for the shift."""
@@ -415,6 +479,9 @@ class ExcelReportGenerator:
     
     def _auto_adjust_columns(self, ws: Union[Worksheet, object]):
         """Auto-adjust column widths based on content."""
+        if not EXCEL_AVAILABLE:
+            return
+            
         for column in ws.columns:
             max_length = 0
             column_letter = get_column_letter(column[0].column)
@@ -517,6 +584,27 @@ class ExcelReportGenerator:
         except Exception as e:
             logger.error(f"Error saving report: {str(e)}")
             return None
+    
+    def is_excel_available(self) -> bool:
+        """
+        Check if Excel functionality is available.
+        
+        Returns:
+            bool: True if Excel functionality is available, False otherwise
+        """
+        return EXCEL_AVAILABLE
+    
+    def get_excel_status_message(self) -> str:
+        """
+        Get a status message about Excel functionality availability.
+        
+        Returns:
+            str: Status message about Excel functionality
+        """
+        if EXCEL_AVAILABLE:
+            return "Excel functionality is available and ready to use."
+        else:
+            return "Excel functionality is not available. Install openpyxl: pip install openpyxl"
     
     def get_report_preview(self, shift: Shift, closing_amount: float) -> Dict:
         """

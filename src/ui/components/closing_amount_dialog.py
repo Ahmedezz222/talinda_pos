@@ -185,6 +185,16 @@ class ClosingAmountDialog(QDialog):
     def _generate_report_and_close(self):
         """Generate Excel report and close the dialog."""
         try:
+            # Check if shift data is available
+            if not self.shift:
+                self.logger.warning("No shift data available for report generation")
+                self.status_label.setText("No shift data available. Report generation skipped.")
+                # Re-enable buttons and accept the dialog
+                self.cancel_btn.setEnabled(True)
+                self.amount_input.setEnabled(True)
+                self.accept()  # Accept the dialog even without shift data
+                return
+            
             # Close the shift first
             if self.auth_controller and self.shift:
                 self.auth_controller.close_shift(self.shift.user, self.amount)
@@ -224,10 +234,24 @@ class ClosingAmountDialog(QDialog):
             
             if not self.shift:
                 self.logger.warning("No shift data available for report generation")
+                self.status_label.setText("No shift data available. Report generation skipped.")
                 return
             
             # Generate the report
             report_generator = ExcelReportGenerator()
+            
+            # Check if Excel functionality is available
+            if not report_generator.is_excel_available():
+                self.logger.error("Excel functionality not available")
+                self.status_label.setText("Excel functionality not available.")
+                QMessageBox.warning(
+                    self, 
+                    "Excel Functionality Unavailable", 
+                    f"{report_generator.get_excel_status_message()}\n\n"
+                    "To fix this, run: pip install openpyxl"
+                )
+                return
+            
             filepath = report_generator.generate_shift_report(self.shift, self.amount)
             
             if filepath:
@@ -245,14 +269,25 @@ class ClosingAmountDialog(QDialog):
                     self.status_label.setText("Report generated! Check the reports folder.")
             else:
                 self.logger.error("Failed to generate Excel report")
-                self.status_label.setText("Report generation failed.")
+                self.status_label.setText("Report generation failed. Check logs for details.")
                 
-        except ImportError:
-            self.logger.error("Excel functionality not available. Install openpyxl: pip install openpyxl")
-            self.status_label.setText("Excel functionality not available.")
+        except ImportError as e:
+            self.logger.error(f"Excel functionality not available: {e}")
+            self.status_label.setText("Excel functionality not available. Install openpyxl: pip install openpyxl")
+            QMessageBox.warning(
+                self, 
+                "Excel Functionality Unavailable", 
+                "The openpyxl library is not installed. Excel reports cannot be generated.\n\n"
+                "To fix this, run: pip install openpyxl"
+            )
         except Exception as e:
             self.logger.error(f"Error generating Excel report: {str(e)}")
-            self.status_label.setText("Report generation failed.")
+            self.status_label.setText("Report generation failed. Check logs for details.")
+            QMessageBox.critical(
+                self, 
+                "Report Generation Error", 
+                f"Failed to generate Excel report:\n{str(e)}\n\nCheck the logs for more details."
+            )
 
     def save_report_as(self):
         """Save the generated report to a user-specified location."""
