@@ -29,7 +29,7 @@ class PaymentDialog(QDialog):
         total_label = QLabel("Total Amount:")
         total_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         
-        self.total_amount = QLabel(f"${self.sale_controller.get_cart_total():.2f}")
+        self.total_amount = QLabel(f"${self.sale_controller.get_cart_total_with_tax():.2f}")
         self.total_amount.setStyleSheet("font-size: 18px; font-weight: bold;")
         
         total_layout.addWidget(total_label)
@@ -79,7 +79,7 @@ class PaymentDialog(QDialog):
         """Calculate and display the change amount."""
         try:
             payment = float(self.amount_input.text() or 0)
-            total = self.sale_controller.get_cart_total()
+            total = self.sale_controller.get_cart_total_with_tax()
             change = payment - total
             
             self.change_amount.setText(f"${change:.2f}")

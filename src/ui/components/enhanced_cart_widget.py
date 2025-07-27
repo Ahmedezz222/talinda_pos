@@ -624,11 +624,14 @@ class EnhancedCartWidget(QWidget):
         from ui.components.payment_dialog import PaymentDialog
         dialog = PaymentDialog(self.sale_controller, self)
         if dialog.exec_() == QDialog.Accepted:
-            if self.sale_controller.complete_sale(self.user):
-                QMessageBox.information(self, "Success", "Sale completed successfully!")
-                self.clear_cart()
-            else:
-                QMessageBox.warning(self, "Error", "Failed to complete sale.")
+            try:
+                if self.sale_controller.complete_sale(self.user):
+                    QMessageBox.information(self, "Success", "Sale completed successfully!")
+                    self.clear_cart()
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to complete sale. Please check stock levels and try again.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"An error occurred during checkout: {str(e)}")
     
     def load_order(self, order) -> None:
         """Load an order into the cart."""

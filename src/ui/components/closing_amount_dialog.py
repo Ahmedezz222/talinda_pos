@@ -197,6 +197,15 @@ class ClosingAmountDialog(QDialog):
             if self.generated_filepath:
                 self.save_btn.setEnabled(True)
                 self.status_label.setText("Report generated! You can save it to another location or close.")
+                # Re-enable other buttons
+                self.cancel_btn.setEnabled(True)
+                self.amount_input.setEnabled(True)
+            else:
+                # If report generation failed, re-enable the generate button
+                self.ok_btn.setEnabled(True)
+                self.cancel_btn.setEnabled(True)
+                self.amount_input.setEnabled(True)
+                self.status_label.setText("Report generation failed. Please try again.")
             
             # Don't auto-close, let user choose to save or close
             
@@ -224,11 +233,15 @@ class ClosingAmountDialog(QDialog):
             if filepath:
                 self.generated_filepath = filepath
                 # Open the Excel file
-                if report_generator.open_excel_file(filepath):
-                    self.logger.info(f"Excel report opened successfully: {filepath}")
-                    self.status_label.setText("Report generated and opened!")
-                else:
-                    self.logger.warning("Report generated but could not open automatically")
+                try:
+                    if report_generator.open_excel_file(filepath):
+                        self.logger.info(f"Excel report opened successfully: {filepath}")
+                        self.status_label.setText("Report generated and opened!")
+                    else:
+                        self.logger.warning("Report generated but could not open automatically")
+                        self.status_label.setText("Report generated! Check the reports folder.")
+                except Exception as e:
+                    self.logger.warning(f"Could not open Excel file automatically: {e}")
                     self.status_label.setText("Report generated! Check the reports folder.")
             else:
                 self.logger.error("Failed to generate Excel report")
@@ -250,6 +263,13 @@ class ClosingAmountDialog(QDialog):
         try:
             from pathlib import Path
             from datetime import datetime
+            import os
+            
+            # Check if the original file still exists
+            if not os.path.exists(self.generated_filepath):
+                QMessageBox.warning(self, 'File Not Found', 
+                                  'The generated report file is no longer available. Please generate a new report.')
+                return
             
             # Get the original filename
             original_path = Path(self.generated_filepath)
@@ -270,17 +290,35 @@ class ClosingAmountDialog(QDialog):
             if filepath:
                 # Copy the generated file to the new location
                 import shutil
-                shutil.copy2(self.generated_filepath, filepath)
-                
-                self.logger.info(f"Report saved to: {filepath}")
-                QMessageBox.information(
-                    self, 
-                    'Report Saved', 
-                    f'Report has been saved successfully to:\n{filepath}'
-                )
-                
-                # Update status
-                self.status_label.setText(f"Report saved to: {Path(filepath).name}")
+                try:
+                    shutil.copy2(self.generated_filepath, filepath)
+                    
+                    # Verify the file was copied successfully
+                    if os.path.exists(filepath):
+                        self.logger.info(f"Report saved to: {filepath}")
+                        QMessageBox.information(
+                            self, 
+                            'Report Saved', 
+                            f'Report has been saved successfully to:\n{filepath}'
+                        )
+                        
+                        # Update status
+                        self.status_label.setText(f"Report saved to: {Path(filepath).name}")
+                    else:
+                        raise Exception("File was not created successfully")
+                        
+                except PermissionError:
+                    QMessageBox.critical(
+                        self, 
+                        'Permission Error', 
+                        f'Cannot save to the selected location. Please choose a different folder or check permissions.'
+                    )
+                except Exception as e:
+                    QMessageBox.critical(
+                        self, 
+                        'Save Error', 
+                        f'Failed to save report:\n{str(e)}'
+                    )
                 
         except Exception as e:
             self.logger.error(f"Error saving report: {str(e)}")

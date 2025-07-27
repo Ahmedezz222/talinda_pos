@@ -272,6 +272,9 @@ class SaleController:
                 logger.warning("Cannot complete sale with empty cart")
                 return False
             
+            # Set the current user for the sale
+            self.current_user = user
+            
             # Process the sale using the existing process_sale method
             sale = self.process_sale()
             
@@ -313,13 +316,15 @@ class SaleController:
         
         try:
             # Create the sale record
-            total_amount = self.get_cart_total()
+            total_amount = self.get_cart_total_with_tax()  # Use total with tax
             sale = Sale(
                 total_amount=total_amount,
                 user_id=self.current_user.id
             )
             
             self.session.add(sale)
+            # Flush to get the sale ID
+            self.session.flush()
             
             # Add products to the sale
             for product_id, cart_item in self.cart.items():

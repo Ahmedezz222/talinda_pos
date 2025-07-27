@@ -17,7 +17,7 @@ import os
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 from sqlalchemy.orm import Session
 from database.db_config import get_fresh_session
 from models.user import Shift, User
@@ -33,6 +33,9 @@ try:
     EXCEL_AVAILABLE = True
 except ImportError:
     EXCEL_AVAILABLE = False
+    # Define a dummy Worksheet class for type hints when openpyxl is not available
+    class Worksheet:
+        pass
     logging.warning("openpyxl not available. Excel reports will not be generated.")
 
 logger = logging.getLogger(__name__)
@@ -74,6 +77,13 @@ class ExcelReportGenerator:
             logger.error("Excel functionality not available. Install openpyxl: pip install openpyxl")
             return None
         
+        # Additional check to ensure openpyxl is properly imported
+        try:
+            import openpyxl
+        except ImportError:
+            logger.error("openpyxl import failed. Please reinstall: pip install openpyxl")
+            return None
+        
         try:
             # Create workbook and worksheet
             wb = openpyxl.Workbook()
@@ -93,16 +103,36 @@ class ExcelReportGenerator:
             # Save the file
             filename = self._generate_filename(shift)
             filepath = self.reports_dir / filename
-            wb.save(str(filepath))
             
-            logger.info(f"Shift report generated: {filepath}")
-            return str(filepath)
+            # Ensure the reports directory exists
+            self.reports_dir.mkdir(exist_ok=True)
+            
+            # Save with error handling
+            try:
+                wb.save(str(filepath))
+                wb.close()  # Explicitly close the workbook
+                logger.info(f"Shift report generated: {filepath}")
+                return str(filepath)
+            except PermissionError as e:
+                logger.error(f"Permission error saving report: {e}")
+                # Try with a different filename
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                alt_filename = f"shift_report_{shift.user.username}_{timestamp}.xlsx"
+                alt_filepath = self.reports_dir / alt_filename
+                wb.save(str(alt_filepath))
+                wb.close()
+                logger.info(f"Shift report generated with alternate filename: {alt_filepath}")
+                return str(alt_filepath)
+            except Exception as e:
+                logger.error(f"Error saving workbook: {e}")
+                wb.close()
+                return None
             
         except Exception as e:
             logger.error(f"Error generating shift report: {str(e)}")
             return None
     
-    def _create_header(self, ws: Worksheet, shift: Shift):
+    def _create_header(self, ws: Union[Worksheet, object], shift: Shift):
         """Create the report header."""
         # Company title
         ws['A1'] = "TALINDA POS SYSTEM"
@@ -134,7 +164,7 @@ class ExcelReportGenerator:
         ws['A9'] = f"Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         ws['A9'].font = Font(italic=True, size=10, color="7F8C8D")
     
-    def _create_shift_summary(self, ws: Worksheet, shift: Shift, closing_amount: float):
+    def _create_shift_summary(self, ws: Union[Worksheet, object], shift: Shift, closing_amount: float):
         """Create the shift summary section."""
         # Section header
         row = 12
@@ -179,7 +209,7 @@ class ExcelReportGenerator:
         else:
             ws[f'B{row}'].font = Font(bold=True, color="E74C3C")
     
-    def _create_sales_summary(self, ws: Worksheet, shift: Shift):
+    def _create_sales_summary(self, ws: Union[Worksheet, object], shift: Shift):
         """Create the sales summary section."""
         # Section header
         row = 22
@@ -211,7 +241,7 @@ class ExcelReportGenerator:
             ws[f'B{row}'] = f"${avg_transaction:.2f}"
             ws[f'B{row}'].font = Font(bold=True)
     
-    def _create_detailed_sales(self, ws: Worksheet, shift: Shift):
+    def _create_detailed_sales(self, ws: Union[Worksheet, object], shift: Shift):
         """Create the detailed sales section."""
         # Section header
         row = 30
@@ -247,7 +277,7 @@ class ExcelReportGenerator:
             for col in range(1, 6):
                 ws.cell(row=row, column=col).border = self.border
     
-    def _create_product_summary(self, ws: Worksheet, shift: Shift):
+    def _create_product_summary(self, ws: Union[Worksheet, object], shift: Shift):
         """Create the product summary section."""
         # Section header
         row = 35 + len(self._get_shift_sales_data(shift))  # Start after detailed sales
@@ -383,7 +413,7 @@ class ExcelReportGenerator:
             logger.error(f"Error getting shift product data: {e}")
             return []
     
-    def _auto_adjust_columns(self, ws: Worksheet):
+    def _auto_adjust_columns(self, ws: Union[Worksheet, object]):
         """Auto-adjust column widths based on content."""
         for column in ws.columns:
             max_length = 0
