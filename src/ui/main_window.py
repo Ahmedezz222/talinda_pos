@@ -39,12 +39,13 @@ import bcrypt
 from controllers.auth_controller import AuthController
 from controllers.product_controller import ProductController
 from controllers.sale_controller import SaleController
+from database.database_manager import DatabaseManager
 from ui.components.enhanced_cart_widget import EnhancedCartWidget
 from ui.components.product_card import ProductCard
 from ui.components.add_product_page import AddProductPage
 from ui.components.order_widget import OrderManagementWidget
-from ui.components.closing_amount_dialog import ClosingAmountDialog
 from ui.components import ShowProductsWindow
+from ui.components.pos_view import ModernPOSView
 from models.user import UserRole, User
 
 
@@ -399,8 +400,8 @@ class ModernPOSWidget(QWidget):
         
         # Calculate grid columns
         available_width = max(400, self.width() - 400)
-        card_width = 150
-        max_cols = max(3, min(8, int(available_width / card_width)))
+        card_width = 200
+        max_cols = max(3, min(6, int(available_width / card_width)))
         
         row = 0
         col = 0
@@ -428,7 +429,7 @@ class ModernPOSWidget(QWidget):
     def create_category_card(self, text: str, bg_color: str, text_color: str) -> QPushButton:
         """Create a category card that looks like a product card."""
         btn = QPushButton(text)
-        btn.setFixedSize(150, 120)
+        btn.setFixedSize(200, 160)
         btn.setCursor(Qt.PointingHandCursor)
         
         # Modern styling with hover effects
@@ -479,8 +480,8 @@ class ModernPOSWidget(QWidget):
         
         # Calculate grid columns based on available width
         available_width = max(400, self.width() - 400)
-        card_width = 150
-        max_cols = max(3, min(8, int(available_width / card_width)))
+        card_width = 200
+        max_cols = max(3, min(6, int(available_width / card_width)))
         
         row = 0
         col = 0
@@ -631,6 +632,10 @@ class ModernAdminPanelWidget(QWidget):
         """)
         layout.addWidget(header)
         
+        # Reports section
+        reports_section = self.create_reports_section()
+        layout.addWidget(reports_section)
+        
         # User management section
         user_section = self.create_user_management_section()
         layout.addWidget(user_section)
@@ -745,6 +750,80 @@ class ModernAdminPanelWidget(QWidget):
         layout.addLayout(info_layout)
         
         return section
+    
+    def create_reports_section(self) -> QWidget:
+        """Create reports section."""
+        section = QGroupBox("📊 Reports & Analytics")
+        section.setStyleSheet("""
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                color: #2c3e50;
+                border: 2px solid #e0e0e0;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        
+        layout = QVBoxLayout(section)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 25, 20, 20)
+        
+        # Buttons
+        buttons_layout = QHBoxLayout()
+        
+        daily_report_btn = QPushButton("📈 Daily Sales Report")
+        daily_report_btn.setStyleSheet(self.get_button_style("#9b59b6"))
+        daily_report_btn.clicked.connect(self.show_daily_sales_report)
+        buttons_layout.addWidget(daily_report_btn)
+        
+        shift_report_btn = QPushButton("🕐 Shift Reports")
+        shift_report_btn.setStyleSheet(self.get_button_style("#f39c12"))
+        shift_report_btn.clicked.connect(self.show_shift_reports)
+        buttons_layout.addWidget(shift_report_btn)
+        
+        layout.addLayout(buttons_layout)
+        
+        return section
+    
+    def show_daily_sales_report(self):
+        """Show the daily sales report dialog."""
+        try:
+            from controllers.shift_controller import ShiftController
+            from ui.components.daily_sales_report_dialog import DailySalesReportDialog
+            
+            shift_controller = ShiftController()
+            report_data = shift_controller.get_daily_sales_report()
+            
+            dialog = DailySalesReportDialog(self, report_data)
+            dialog.exec_()
+            
+        except Exception as e:
+            self.logger.error(f"Error showing daily sales report: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to show daily sales report: {str(e)}")
+    
+    def show_shift_reports(self):
+        """Show shift reports dialog."""
+        try:
+            from controllers.shift_controller import ShiftController
+            from ui.components.daily_sales_report_dialog import DailySalesReportDialog
+            
+            shift_controller = ShiftController()
+            # For now, show the same dialog but could be enhanced for shift-specific reports
+            report_data = shift_controller.get_daily_sales_report()
+            
+            dialog = DailySalesReportDialog(self, report_data)
+            dialog.exec_()
+            
+        except Exception as e:
+            self.logger.error(f"Error showing shift reports: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to show shift reports: {str(e)}")
     
     def get_button_style(self, color: str) -> str:
         """Get button styling."""
@@ -885,6 +964,10 @@ class ModernMainWindow(QMainWindow):
         self.sale_controller = SaleController()
         self.logger = logging.getLogger(__name__)
         
+        # Add missing attributes for the new POS view
+        self.settings = None  # Can be enhanced later with proper settings
+        self.database_manager = DatabaseManager()  # Initialize database manager
+        
         self.init_ui()
         self.setup_menu()
         self.setup_status_bar()
@@ -984,8 +1067,12 @@ class ModernMainWindow(QMainWindow):
     
     def init_pages(self):
         """Initialize all pages."""
-        # POS System page
-        self.pos_widget = ModernPOSWidget(self.user, self.product_controller, self.sale_controller)
+        # POS System page - Using the Modern POS Widget with cart functionality
+        self.pos_widget = ModernPOSWidget(
+            user=self.user,
+            product_controller=self.product_controller,
+            sale_controller=self.sale_controller
+        )
         self.stacked_widget.addWidget(self.pos_widget)
         
         # Order Management page
@@ -1179,23 +1266,8 @@ class ModernMainWindow(QMainWindow):
     
     def closeEvent(self, event):
         """Handle window close event."""
-        if hasattr(self.user, 'role') and getattr(self.user, 'role', None) and self.user.role.value == 'cashier':
-            # Handle cashier closing flow
-            try:
-                from ui.components.closing_amount_dialog import ClosingAmountDialog
-                closing_dialog = ClosingAmountDialog(self)
-                if closing_dialog.exec_() == QDialog.Accepted and closing_dialog.amount is not None:
-                    # Close shift
-                    auth_controller = AuthController()
-                    auth_controller.close_shift(self.user, closing_dialog.amount)
-                    event.accept()
-                else:
-                    event.ignore()
-            except Exception as e:
-                self.logger.error(f"Error during closing: {str(e)}")
-                event.accept()
-        else:
-            event.accept()
+        # Close the application directly without closing amount dialog
+        event.accept()
 
 
 # Alias for backward compatibility

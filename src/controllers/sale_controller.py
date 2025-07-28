@@ -9,6 +9,7 @@ from database.db_config import Session, safe_commit, get_fresh_session
 from models.sale import Sale, sale_products
 from models.product import Product
 from models.user import User
+from models.order import Order, OrderStatus, order_products
 from sqlalchemy import update
 import logging
 
@@ -60,19 +61,15 @@ class SaleController:
             product: The product to add
             quantity: Quantity to add (default: 1)
         Returns:
-            bool: True if added successfully, False if insufficient stock
+            bool: True if added successfully
         """
-        current_stock = int(getattr(product, 'stock', 0))
         product_id = int(getattr(product, 'id', 0))
-        if current_stock >= quantity:
-            if product_id in self.cart:
-                self.cart[product_id].quantity += quantity
-            else:
-                self.cart[product_id] = CartItem(product, quantity)
-            logger.debug(f"Added {quantity} of {product.name} to cart")
-            return True
-        logger.warning(f"Insufficient stock for {product.name}: {current_stock} available, {quantity} requested")
-        return False
+        if product_id in self.cart:
+            self.cart[product_id].quantity += quantity
+        else:
+            self.cart[product_id] = CartItem(product, quantity)
+        logger.debug(f"Added {quantity} of {product.name} to cart")
+        return True
     
     def remove_from_cart(self, product_id: int) -> None:
         """
@@ -94,15 +91,12 @@ class SaleController:
             product_id: ID of the product to update
             quantity: New quantity
         Returns:
-            bool: True if updated successfully, False if insufficient stock
+            bool: True if updated successfully
         """
         if product_id in self.cart:
-            product = self.cart[product_id].product
-            current_stock = int(getattr(product, 'stock', 0))
-            if current_stock >= quantity:
-                self.cart[product_id].quantity = quantity
-                logger.debug(f"Updated quantity of {product.name} to {quantity}")
-                return True
+            self.cart[product_id].quantity = quantity
+            logger.debug(f"Updated quantity of {self.cart[product_id].product.name} to {quantity}")
+            return True
         return False
     
     def apply_item_discount(self, product_id: int, discount_percentage: float = 0.0, discount_amount: float = 0.0) -> bool:
@@ -231,23 +225,17 @@ class SaleController:
                 product = item['product']
                 quantity = item['quantity']
                 
-                # Check if product still exists and has sufficient stock
+                # Check if product still exists
                 current_product = self.session.query(Product).filter_by(id=product.id).first()
                 if not current_product:
                     logger.warning(f"Product {product.name} (ID: {product.id}) no longer exists")
                     continue
                 
-                if current_product.stock < quantity:
-                    logger.warning(f"Insufficient stock for {current_product.name}: {current_product.stock} available, {quantity} needed")
-                    # Add what's available
-                    quantity = current_product.stock
-                
-                if quantity > 0:
-                    # Add to cart with the original price from the order
-                    cart_item = CartItem(current_product, quantity)
-                    cart_item.price = item['price']  # Use the price from the order
-                    self.cart[current_product.id] = cart_item
-                    logger.info(f"Added {quantity} of {current_product.name} to cart from order")
+                # Add to cart with the original price from the order
+                cart_item = CartItem(current_product, quantity)
+                cart_item.price = item['price']  # Use the price from the order
+                self.cart[current_product.id] = cart_item
+                logger.info(f"Added {quantity} of {current_product.name} to cart from order")
             
             logger.info(f"Loaded {len(self.cart)} items from order {order.order_number}")
             return True
@@ -298,7 +286,7 @@ class SaleController:
     
     def process_sale(self, payment_method: str = "cash") -> Optional[Sale]:
         """
-        Process the current cart as a sale.
+        Process the current cart as a sale and create a completed order.
         
         Args:
             payment_method: Method of payment (cash, card, etc.)
@@ -337,19 +325,9 @@ class SaleController:
                         price_at_sale=cart_item.price
                     )
                 )
-                
-                # Update product stock
-                product = cart_item.product
-                new_stock = int(getattr(product, 'stock', 0)) - cart_item.quantity
-                if new_stock < 0:
-                    logger.error(f"Insufficient stock for {product.name}")
-                    self.session.rollback()
-                    return None
-                
-                # Update stock in database
-                self.session.execute(
-                    update(Product).where(Product.id == product_id).values(stock=new_stock)
-                )
+            
+            # Create a completed order for the sale
+            self._create_completed_order_from_sale(sale)
             
             # Commit the transaction
             if safe_commit(self.session):
@@ -365,6 +343,61 @@ class SaleController:
             logger.error(f"Error processing sale: {e}")
             self.session.rollback()
             return None
+    
+    def _create_completed_order_from_sale(self, sale: Sale) -> None:
+        """
+        Create a completed order from a sale for order history tracking.
+        
+        Args:
+            sale: The sale object to create order from
+        """
+        try:
+            from controllers.order_controller import OrderController
+            from models.order import Order, OrderStatus
+            
+            # Create order controller
+            order_controller = OrderController()
+            
+            # Generate order number based on sale
+            order_number = f"SALE-{sale.id:06d}"
+            
+            # Create the order
+            order = Order(
+                order_number=order_number,
+                customer_name=f"Sale #{sale.id}",
+                user_id=sale.user_id,
+                status=OrderStatus.COMPLETED,
+                created_at=sale.timestamp,
+                completed_at=sale.timestamp,
+                subtotal=sale.total_amount,
+                total_amount=sale.total_amount,
+                notes=f"Completed sale - Payment processed"
+            )
+            
+            # Add order to session
+            self.session.add(order)
+            self.session.flush()  # Get the order ID
+            
+            # Add order items from sale
+            for product_id, cart_item in self.cart.items():
+                # Add to order_products table
+                from models.order import order_products
+                self.session.execute(
+                    order_products.insert().values(
+                        order_id=order.id,
+                        product_id=product_id,
+                        quantity=cart_item.quantity,
+                        price_at_order=cart_item.price,
+                        notes=None
+                    )
+                )
+            
+            logger.info(f"Created completed order {order_number} from sale {sale.id}")
+            
+        except Exception as e:
+            logger.error(f"Error creating completed order from sale: {e}")
+            # Don't fail the sale if order creation fails
+            pass
     
     def get_sales_history(self, limit: int = 50) -> List[Sale]:
         """
@@ -384,7 +417,7 @@ class SaleController:
 
     def delete_sale(self, sale_id: int) -> bool:
         """
-        Delete a sale and restore product stock.
+        Delete a sale.
         
         Args:
             sale_id: ID of the sale to delete
@@ -404,16 +437,7 @@ class SaleController:
                 sale_products.select().where(sale_products.c.sale_id == sale_id)
             ).fetchall()
             
-            # Restore stock for each product
-            for sale_product in sale_products_data:
-                product_id = sale_product.product_id
-                quantity = sale_product.quantity
-                
-                # Update product stock
-                product = self.session.query(Product).filter_by(id=product_id).first()
-                if product:
-                    product.stock += quantity
-                    logger.info(f"Restored {quantity} units to product {product.name} (ID: {product_id})")
+
             
             # Delete the sale
             self.session.delete(sale)

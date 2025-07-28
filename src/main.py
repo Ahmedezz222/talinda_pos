@@ -17,6 +17,7 @@ import logging
 import traceback
 from pathlib import Path
 from typing import Optional, Tuple
+import datetime
 
 # Add the src directory to Python path for imports
 current_dir = Path(__file__).parent.absolute()
@@ -35,9 +36,11 @@ from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QE
 from controllers.auth_controller import AuthController
 from ui.main_window import MainWindow
 from ui.components.opening_amount_dialog import OpeningAmountDialog
-from ui.components.closing_amount_dialog import ClosingAmountDialog
 from models.user import Shift, ShiftStatus
 from init_database import init_database
+from utils.background_tasks import BackgroundTaskManager
+from utils.daily_reset_task import DailyResetTask
+from database.db_config import safe_commit
 
 
 # Import configuration
@@ -373,6 +376,8 @@ class ApplicationManager:
         self.splash_screen = None
         self.login_dialog = None
         self.main_window = None
+        self.background_task_manager = None
+        self.daily_reset_task = None
         self.logger = logging.getLogger(__name__)
     
     def initialize_application(self) -> bool:
@@ -399,6 +404,15 @@ class ApplicationManager:
             # Load stylesheet
             self.splash_screen.update_progress(60, "Loading styles...")
             self.load_stylesheet()
+            
+            # Initialize background task manager
+            self.splash_screen.update_progress(80, "Initializing background tasks...")
+            self.background_task_manager = BackgroundTaskManager(check_interval_minutes=60)
+            
+            # Initialize daily reset task
+            self.daily_reset_task = DailyResetTask()
+            self.daily_reset_task.reset_triggered.connect(self.on_daily_reset)
+            self.daily_reset_task.start()
             
             # Complete initialization
             self.splash_screen.update_progress(100, "Ready!")
@@ -450,16 +464,96 @@ class ApplicationManager:
             return None
     
     def handle_cashier_flow(self, user) -> Optional[float]:
-        """Handle cashier-specific opening amount flow."""
+        """Handle cashier-specific opening amount flow with existing shift management."""
         try:
-            opening_dialog = OpeningAmountDialog()
-            if opening_dialog.exec_() == QDialog.Accepted and opening_dialog.amount is not None:
-                self.login_dialog.auth_controller.open_shift(user, opening_dialog.amount)
-                return opening_dialog.amount
+            # Check if there's already an open shift
+            from controllers.shift_controller import ShiftController
+            shift_controller = ShiftController()
+            
+            any_open_shift = shift_controller.get_any_open_shift()
+            if any_open_shift and any_open_shift.user_id != user.id:
+                self.show_error_dialog(
+                    "Shift Already Open", 
+                    f"There's already an open shift by {any_open_shift.user.username}. "
+                    "Please close that shift before opening a new one."
+                )
+                return None
+            
+            # Check if this user already has an open shift
+            current_shift = shift_controller.get_current_shift(user)
+            
+            # Show the enhanced opening amount dialog
+            opening_dialog = OpeningAmountDialog(existing_shift=current_shift)
+            if opening_dialog.exec_() == QDialog.Accepted:
+                action = opening_dialog.get_action()
+                
+                if action == 'close_existing':
+                    # Close the existing shift
+                    if current_shift:
+                        # Show password authentication for closing
+                        from ui.components.shift_close_auth_dialog import ShiftCloseAuthDialog
+                        auth_dialog = ShiftCloseAuthDialog(user.username)
+                        if auth_dialog.exec_() == QDialog.Accepted and auth_dialog.is_authenticated():
+                            password = auth_dialog.get_password()
+                            closed_shift = shift_controller.close_shift_with_auth(user, password)
+                            if closed_shift:
+                                # Show shift summary
+                                shift_summary = shift_controller.get_shift_summary(closed_shift)
+                                summary_message = f"""
+Shift Closed Successfully!
+
+Cashier: {shift_summary.get('user', 'Unknown')}
+Opening Amount: ${shift_summary.get('opening_amount', 0):.2f}
+Total Sales: {shift_summary.get('total_sales', 0)}
+Total Amount: ${shift_summary.get('total_amount', 0):.2f}
+                                """
+                                QMessageBox.information(
+                                    None,
+                                    "Shift Closed",
+                                    summary_message
+                                )
+                                # Return to login (user will need to log in again)
+                                return None
+                            else:
+                                self.show_error_dialog("Error", "Failed to close shift. Please try again.")
+                                return None
+                        else:
+                            # User cancelled authentication
+                            return None
+                    else:
+                        self.show_error_dialog("Error", "No shift found to close.")
+                        return None
+                
+                elif action == 'open_new':
+                    # Open a new shift (this will replace the current one if it exists)
+                    amount = opening_dialog.get_amount()
+                    if amount is not None:
+                        # If there's an existing shift, close it first
+                        if current_shift:
+                            # Close existing shift without authentication (since user chose to replace)
+                            current_shift.status = ShiftStatus.CLOSED
+                            current_shift.close_time = datetime.datetime.utcnow()
+                            # Use the new opening amount as closing amount for simplicity
+                            current_shift.closing_amount = amount
+                            safe_commit(shift_controller.session)
+                            self.logger.info(f"Closed existing shift for user {user.username}")
+                        
+                        # Open new shift
+                        shift = shift_controller.open_shift(user, amount)
+                        if shift:
+                            return amount
+                        else:
+                            self.show_error_dialog("Error", "Failed to open shift. Please try again.")
+                            return None
+                    else:
+                        self.show_error_dialog("Error", "Please enter a valid opening amount.")
+                        return None
+            
             return None
+            
         except Exception as e:
             self.logger.error(f"Cashier flow error: {str(e)}")
-            self.show_error_dialog("Error", f"Failed to open shift:\n{str(e)}")
+            self.show_error_dialog("Error", f"Failed to handle shift management:\n{str(e)}")
             return None
     
     def create_main_window(self, user, opening_amount: Optional[float]):
@@ -479,22 +573,20 @@ class ApplicationManager:
             return False
     
     def setup_cashier_closing(self, user):
-        """Setup cashier closing flow."""
+        """Setup cashier closing flow with password authentication."""
         def on_close_event(event):
             try:
-                # Get a fresh session to ensure we can find the shift
-                from database.db_config import get_fresh_session
-                fresh_session = get_fresh_session()
+                # Use the new shift controller
+                from controllers.shift_controller import ShiftController
+                from PyQt5.QtWidgets import QMessageBox
+                from ui.components.shift_close_auth_dialog import ShiftCloseAuthDialog
                 
-                # Get the current open shift for this user
-                current_shift = fresh_session.query(Shift).filter_by(
-                    user_id=user.id, status=ShiftStatus.OPEN
-                ).first()
+                shift_controller = ShiftController()
+                current_shift = shift_controller.get_current_shift(user)
                 
                 if not current_shift:
                     self.logger.warning(f"No open shift found for user {user.username}")
                     # Show a simple message and close
-                    from PyQt5.QtWidgets import QMessageBox
                     QMessageBox.information(
                         self.main_window,
                         "No Active Shift",
@@ -502,26 +594,61 @@ class ApplicationManager:
                     )
                     event.accept()
                     self.app.quit()
-                    fresh_session.close()
                     return
                 
-                closing_dialog = ClosingAmountDialog(
-                    self.main_window, 
-                    shift=current_shift, 
-                    auth_controller=self.login_dialog.auth_controller
-                )
-                if closing_dialog.exec_() == QDialog.Accepted and closing_dialog.amount is not None:
-                    event.accept()
-                    self.app.quit()
+                # Show password authentication dialog
+                auth_dialog = ShiftCloseAuthDialog(user.username, self.main_window)
+                if auth_dialog.exec_() == QDialog.Accepted and auth_dialog.is_authenticated():
+                    password = auth_dialog.get_password()
+                    
+                    # Close the shift with password authentication
+                    closed_shift = shift_controller.close_shift_with_auth(user, password)
+                    if closed_shift:
+                        # Show shift summary
+                        shift_summary = shift_controller.get_shift_summary(closed_shift)
+                        summary_message = f"""
+Shift Closed Successfully!
+
+Cashier: {shift_summary.get('user', 'Unknown')}
+Opening Amount: ${shift_summary.get('opening_amount', 0):.2f}
+Total Sales: {shift_summary.get('total_sales', 0)}
+Total Amount: ${shift_summary.get('total_amount', 0):.2f}
+                        """
+                        QMessageBox.information(
+                            self.main_window,
+                            "Shift Closed",
+                            summary_message
+                        )
+                        
+                        # Stop background task manager
+                        if self.background_task_manager:
+                            self.background_task_manager.stop()
+                            self.logger.info("Background task manager stopped")
+                        
+                        # Close the application
+                        event.accept()
+                        self.app.quit()
+                    else:
+                        QMessageBox.warning(
+                            self.main_window,
+                            "Authentication Failed",
+                            "Invalid password. Please try again."
+                        )
+                        # Don't close the application, let the user try again
+                        event.ignore()
                 else:
+                    # User cancelled the authentication dialog
+                    self.logger.info(f"User {user.username} cancelled shift close authentication")
                     event.ignore()
                     
-                # Close the fresh session
-                fresh_session.close()
             except Exception as e:
                 self.logger.error(f"Closing dialog error: {str(e)}")
-                event.accept()
-                self.app.quit()
+                QMessageBox.critical(
+                    self.main_window,
+                    "Error",
+                    f"An error occurred while closing the shift:\n{str(e)}"
+                )
+                event.ignore()
         
         self.main_window.closeEvent = on_close_event
     
@@ -531,6 +658,82 @@ class ApplicationManager:
             QMessageBox.critical(None, title, message)
         else:
             print(f"ERROR - {title}: {message}")
+    
+    def setup_background_task_handlers(self):
+        """Setup handlers for background task events."""
+        if self.background_task_manager:
+            # Connect signals to handlers
+            self.background_task_manager.orders_auto_closed.connect(self.on_orders_auto_closed)
+            self.background_task_manager.task_error.connect(self.on_background_task_error)
+    
+    def on_orders_auto_closed(self, count: int):
+        """Handle orders auto-closed event."""
+        self.logger.info(f"Background task auto-closed {count} orders")
+        # Optionally show a notification to the user
+        if self.main_window:
+            try:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self.main_window,
+                    "Orders Auto-Closed",
+                    f"{count} orders older than 24 hours have been automatically completed."
+                )
+            except Exception as e:
+                self.logger.error(f"Error showing auto-close notification: {e}")
+    
+    def on_background_task_error(self, error_message: str):
+        """Handle background task error."""
+        self.logger.error(f"Background task error: {error_message}")
+        # Optionally show error notification to user
+        if self.main_window:
+            try:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self.main_window,
+                    "Background Task Error",
+                    f"An error occurred in background tasks:\n{error_message}"
+                )
+            except Exception as e:
+                self.logger.error(f"Error showing background task error notification: {e}")
+    
+    def on_daily_reset(self):
+        """Handle daily reset event."""
+        try:
+            from controllers.shift_controller import ShiftController
+            shift_controller = ShiftController()
+            shift_controller.reset_daily_sales()
+            
+            self.logger.info("Daily sales reset completed")
+            
+            # Optionally show a notification
+            if self.main_window:
+                QMessageBox.information(
+                    self.main_window,
+                    "Daily Reset",
+                    "Daily sales data has been reset for the new day."
+                )
+                
+        except Exception as e:
+            self.logger.error(f"Error during daily reset: {e}")
+            if self.main_window:
+                QMessageBox.warning(
+                    self.main_window,
+                    "Daily Reset Error",
+                    f"Error during daily reset: {str(e)}"
+                )
+    
+    def cleanup(self):
+        """Clean up resources before application exit."""
+        try:
+            if self.background_task_manager:
+                self.background_task_manager.stop()
+                self.logger.info("Background task manager cleaned up")
+            
+            if self.daily_reset_task:
+                self.daily_reset_task.stop()
+                self.logger.info("Daily reset task cleaned up")
+        except Exception as e:
+            self.logger.error(f"Error during cleanup: {e}")
     
     def run(self) -> int:
         """Run the complete application."""
@@ -550,11 +753,23 @@ class ApplicationManager:
             if not self.create_main_window(user, opening_amount):
                 return 1
             
+            # Setup background task handlers
+            self.setup_background_task_handlers()
+            
+            # Start background task manager
+            if self.background_task_manager:
+                self.background_task_manager.start()
+                self.logger.info("Background task manager started")
+            
             # Show main window and run application
             self.main_window.show()
             self.logger.info("Application started successfully")
             
-            return self.app.exec_()
+            # Run the application and cleanup on exit
+            try:
+                return self.app.exec_()
+            finally:
+                self.cleanup()
             
         except Exception as e:
             self.logger.error(f"Application runtime error: {str(e)}")

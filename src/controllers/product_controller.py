@@ -67,38 +67,7 @@ class ProductController:
             logger.error(f"Error getting product by ID {product_id}: {e}")
             return None
     
-    def update_stock(self, product_id: int, quantity_change: int) -> bool:
-        """
-        Update the stock level of a product.
-        
-        Args:
-            product_id: ID of the product to update
-            quantity_change: Amount to change the stock by (positive or negative)
-            
-        Returns:
-            bool: True if update successful, False otherwise
-        """
-        try:
-            product = self.session.query(Product).filter_by(id=product_id).one()
-            new_stock = product.stock + quantity_change
-            if new_stock >= 0:
-                product.stock = new_stock
-                if safe_commit(self.session):
-                    logger.info(f"Stock updated for product {product_id}: {quantity_change}")
-                    return True
-                else:
-                    logger.error("Failed to commit stock update")
-                    return False
-            return False
-        except NoResultFound:
-            logger.warning(f"Product not found for stock update: {product_id}")
-            return False
-        except Exception as e:
-            logger.error(f"Error updating stock for product {product_id}: {e}")
-            self.session.rollback()
-            return False
-
-    def add_product(self, name, description, price, category_id, stock=0, barcode=None, image_path=None):
+    def add_product(self, name, description, price, category_id, barcode=None, image_path=None):
         """
         Add a new product to the database.
         Args:
@@ -106,7 +75,6 @@ class ProductController:
             description (str): Product description
             price (float): Product price
             category_id (int): Category ID
-            stock (int): Initial stock
             barcode (str): Product barcode
             image_path (str): Path to product image
         Returns:
@@ -127,7 +95,6 @@ class ProductController:
                 description=description,
                 price=price,
                 category_id=category_id,
-                stock=stock,
                 barcode=barcode,
                 image_path=image_path
             )

@@ -20,8 +20,8 @@ class ShowProductsWindow(QDialog):
         layout.addWidget(title)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(8)  # Added one more column for delete button
-        self.table.setHorizontalHeaderLabels(['Name', 'Description', 'Price', 'Category', 'Stock', 'Barcode', 'Image Path', 'Actions'])
+        self.table.setColumnCount(7)  # Removed stock column
+        self.table.setHorizontalHeaderLabels(['Name', 'Description', 'Price', 'Category', 'Barcode', 'Image Path', 'Actions'])
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet('QTableWidget { alternate-background-color: #f0f6ff; }')
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -33,11 +33,10 @@ class ShowProductsWindow(QDialog):
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # Description
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Price
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Category
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Stock
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Barcode
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # Image Path
-        header.setSectionResizeMode(7, QHeaderView.Fixed)  # Actions column fixed width
-        self.table.setColumnWidth(7, 100)  # Set actions column width
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Barcode
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Image Path
+        header.setSectionResizeMode(6, QHeaderView.Fixed)  # Actions column fixed width
+        self.table.setColumnWidth(6, 100)  # Set actions column width
         
         self.load_products()
         layout.addWidget(self.table)
@@ -94,9 +93,8 @@ class ShowProductsWindow(QDialog):
             self.table.setItem(row, 2, QTableWidgetItem(f"${product.price:.2f}"))
             cat_name = product.category.name if product.category else 'No Category'
             self.table.setItem(row, 3, QTableWidgetItem(cat_name))
-            self.table.setItem(row, 4, QTableWidgetItem(str(product.stock)))
-            self.table.setItem(row, 5, QTableWidgetItem(product.barcode or ''))
-            self.table.setItem(row, 6, QTableWidgetItem(product.image_path or ''))
+            self.table.setItem(row, 4, QTableWidgetItem(product.barcode or ''))
+            self.table.setItem(row, 5, QTableWidgetItem(product.image_path or ''))
             
             # Create actions widget
             actions_widget = QWidget()
@@ -167,7 +165,7 @@ class ShowProductsWindow(QDialog):
                 """)
             
             actions_layout.addStretch()
-            self.table.setCellWidget(row, 7, actions_widget)
+            self.table.setCellWidget(row, 6, actions_widget)
 
     def delete_product(self, product_id: int, product_name: str):
         """Delete a product with confirmation dialog."""

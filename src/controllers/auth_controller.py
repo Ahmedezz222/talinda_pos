@@ -90,26 +90,7 @@ class AuthController:
             logger.error(f"Error getting open shift for user {user.username}: {e}")
             return None
 
-    def close_shift(self, user, closing_amount):
-        """Close the current open shift for the user with the closing amount."""
-        try:
-            shift = self.get_open_shift(user)
-            if shift:
-                shift.status = ShiftStatus.CLOSED
-                shift.close_time = datetime.datetime.utcnow()
-                shift.closing_amount = closing_amount
-                
-                if safe_commit(self.session):
-                    logger.info(f"Shift closed for user {user.username} with amount {closing_amount}")
-                    return shift
-                else:
-                    logger.error("Failed to commit shift closing")
-                    return None
-            return None
-        except Exception as e:
-            logger.error(f"Error closing shift: {e}")
-            self.session.rollback()
-            return None
+
     
     def __del__(self):
         """Clean up the session."""

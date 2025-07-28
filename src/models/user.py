@@ -39,7 +39,6 @@ class Shift(Base):
     open_time = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     close_time = Column(DateTime, nullable=True)
     opening_amount = Column(Float, nullable=False)
-    closing_amount = Column(Float, nullable=True)
     status = Column(Enum(ShiftStatus), default=ShiftStatus.OPEN, nullable=False)
 
     user = relationship('User')

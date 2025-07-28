@@ -112,14 +112,7 @@ class AddProductPage(QWidget):
         form_grid.addWidget(cat_label, 3, 0)
         form_grid.addWidget(self.cat_combo, 3, 1)
 
-        # Stock
-        stock_label = QLabel('Stock:')
-        stock_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #2c3e50;")
-        self.stock_input = QLineEdit()
-        self.stock_input.setPlaceholderText('e.g. 100')
-        self.stock_input.setMinimumHeight(40)
-        form_grid.addWidget(stock_label, 4, 0)
-        form_grid.addWidget(self.stock_input, 4, 1)
+
 
         # Barcode
         barcode_label = QLabel('Barcode:')
@@ -127,8 +120,8 @@ class AddProductPage(QWidget):
         self.barcode_input = QLineEdit()
         self.barcode_input.setPlaceholderText('Scan or enter barcode')
         self.barcode_input.setMinimumHeight(40)
-        form_grid.addWidget(barcode_label, 5, 0)
-        form_grid.addWidget(self.barcode_input, 5, 1)
+        form_grid.addWidget(barcode_label, 4, 0)
+        form_grid.addWidget(self.barcode_input, 4, 1)
 
         # Image Path
         image_label = QLabel('Image Path:')
@@ -150,8 +143,8 @@ class AddProductPage(QWidget):
         image_btn.clicked.connect(self.browse_image)
         image_layout.addWidget(self.image_input)
         image_layout.addWidget(image_btn)
-        form_grid.addWidget(image_label, 6, 0)
-        form_grid.addLayout(image_layout, 6, 1)
+        form_grid.addWidget(image_label, 5, 0)
+        form_grid.addLayout(image_layout, 5, 1)
 
         layout.addLayout(form_grid)
 
@@ -333,11 +326,6 @@ class AddProductPage(QWidget):
             return
         category_index = self.cat_combo.currentIndex()
         category_id = self.cat_combo.itemData(category_index)
-        try:
-            stock = int(self.stock_input.text())
-        except ValueError:
-            QMessageBox.warning(self, 'Input Error', 'Invalid stock.')
-            return
         barcode = self.barcode_input.text().strip()
         image_path = self.image_input.text().strip()
         if not name or not price or not category_id:
@@ -348,7 +336,6 @@ class AddProductPage(QWidget):
             'description': description,
             'price': price,
             'category_id': category_id,
-            'stock': stock,
             'barcode': barcode,
             'image_path': image_path
         }
@@ -368,7 +355,6 @@ class AddProductPage(QWidget):
         self.name_input.clear()
         self.desc_input.clear()
         self.price_input.clear()
-        self.stock_input.clear()
         self.barcode_input.clear()
         self.image_input.clear()
         self.cancelled.emit() 

@@ -13,8 +13,6 @@ engine = create_engine(
     'sqlite:///pos_database.db',
     pool_pre_ping=True,  # Verify connections before use
     pool_recycle=3600,   # Recycle connections after 1 hour
-    pool_timeout=30,     # 30 second timeout for getting connection from pool
-    max_overflow=10,     # Allow up to 10 connections beyond pool size
     connect_args={
         'timeout': 30,   # SQLite timeout for busy database
         'check_same_thread': False,  # Allow multi-threading
@@ -71,8 +69,6 @@ def refresh_engine():
         'sqlite:///pos_database.db',
         pool_pre_ping=True,
         pool_recycle=3600,
-        pool_timeout=30,
-        max_overflow=10,
         connect_args={
             'timeout': 30,
             'check_same_thread': False,

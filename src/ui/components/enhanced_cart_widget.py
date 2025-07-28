@@ -3,6 +3,7 @@ Enhanced cart widget that supports both regular POS sales and table orders.
 """
 import sys
 import os
+import logging
 
 # Add the src directory to Python path
 current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,6 +16,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton,
                            QComboBox, QTextEdit, QTabWidget)
 from PyQt5.QtCore import Qt, pyqtSignal
 from controllers.sale_controller import SaleController, CartItem
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class DiscountDialog(QDialog):
@@ -294,16 +298,32 @@ class EnhancedCartWidget(QWidget):
         
         clear_btn = QPushButton("Clear Cart")
         clear_btn.clicked.connect(self.clear_cart)
-        clear_btn.setStyleSheet("""
-            background-color: #e74c3c;
-            color: white;
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            font-size: 13px;
-            font-weight: bold;
-            min-height: 40px;
-        """)
+        
+        # Style based on user role - show admin requirement for cashiers
+        if hasattr(self.user, 'role') and getattr(self.user.role, 'value', None) == 'cashier':
+            clear_btn.setStyleSheet("""
+                background-color: #e74c3c;
+                color: white;
+                padding: 10px;
+                border: 2px solid #f39c12;
+                border-radius: 5px;
+                font-size: 13px;
+                font-weight: bold;
+                min-height: 40px;
+            """)
+            clear_btn.setToolTip("Clear cart (Admin authentication required)")
+        else:
+            clear_btn.setStyleSheet("""
+                background-color: #e74c3c;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+                font-size: 13px;
+                font-weight: bold;
+                min-height: 40px;
+            """)
+            clear_btn.setToolTip("Clear cart")
         
         top_btn_layout.addWidget(discount_btn)
         top_btn_layout.addWidget(clear_btn)
@@ -356,8 +376,6 @@ class EnhancedCartWidget(QWidget):
             else:
                 self.update_item_widget(product.id)
             self.update_totals()
-        else:
-            QMessageBox.warning(self, "Stock Error", f"Insufficient stock for {product.name}")
     
     def create_item_widget(self, product) -> None:
         """Create a widget for a cart item."""
@@ -476,14 +494,28 @@ class EnhancedCartWidget(QWidget):
         remove_btn = QPushButton("×")
         remove_btn.setFixedSize(28, 28)
         remove_btn.clicked.connect(lambda: self.remove_item(product.id))
-        remove_btn.setStyleSheet("""
-            background-color: #e74c3c; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            font-weight: bold;
-            font-size: 16px;
-        """)
+        
+        # Style based on user role - show admin requirement for cashiers
+        if hasattr(self.user, 'role') and getattr(self.user.role, 'value', None) == 'cashier':
+            remove_btn.setStyleSheet("""
+                background-color: #e74c3c; 
+                color: white; 
+                border: 2px solid #f39c12; 
+                border-radius: 4px; 
+                font-weight: bold;
+                font-size: 16px;
+            """)
+            remove_btn.setToolTip("Remove item (Admin authentication required)")
+        else:
+            remove_btn.setStyleSheet("""
+                background-color: #e74c3c; 
+                color: white; 
+                border: none; 
+                border-radius: 4px; 
+                font-weight: bold;
+                font-size: 16px;
+            """)
+            remove_btn.setToolTip("Remove item")
         
         action_layout.addWidget(discount_btn)
         action_layout.addWidget(remove_btn)
@@ -523,6 +555,16 @@ class EnhancedCartWidget(QWidget):
     
     def remove_item(self, product_id: int) -> None:
         """Remove an item from the cart."""
+        # Check if current user is cashier and requires admin authentication
+        if hasattr(self.user, 'role') and getattr(self.user.role, 'value', None) == 'cashier':
+            # Show admin authentication dialog
+            from ui.components.admin_auth_dialog import AdminAuthDialog
+            auth_dialog = AdminAuthDialog(self, "remove items from cart")
+            
+            if auth_dialog.exec_() != QDialog.Accepted:
+                return  # User cancelled or authentication failed
+        
+        # Proceed with item removal
         if product_id in self.cart_items:
             widget = self.cart_items[product_id]
             self.cart_layout.removeWidget(widget)
@@ -536,7 +578,24 @@ class EnhancedCartWidget(QWidget):
         if product_id in self.sale_controller.cart:
             item = self.sale_controller.cart[product_id]
             new_qty = item.quantity + change
-            if new_qty > 0 and self.sale_controller.update_quantity(product_id, new_qty):
+            
+            # If trying to reduce quantity to 0 (remove item), check permissions
+            if new_qty <= 0:
+                # Check if current user is cashier and requires admin authentication
+                if hasattr(self.user, 'role') and getattr(self.user.role, 'value', None) == 'cashier':
+                    # Show admin authentication dialog
+                    from ui.components.admin_auth_dialog import AdminAuthDialog
+                    auth_dialog = AdminAuthDialog(self, "remove items from cart")
+                    
+                    if auth_dialog.exec_() != QDialog.Accepted:
+                        return  # User cancelled or authentication failed
+                
+                # If admin authenticated or user is not cashier, remove the item
+                self.remove_item(product_id)
+                return
+            
+            # Normal quantity update
+            if self.sale_controller.update_quantity(product_id, new_qty):
                 self.update_item_widget(product_id)
                 self.update_totals()
     
@@ -591,12 +650,51 @@ class EnhancedCartWidget(QWidget):
     
     def clear_cart(self) -> None:
         """Clear all items from the cart."""
+        # Check if current user is cashier and requires admin authentication
+        if hasattr(self.user, 'role') and getattr(self.user.role, 'value', None) == 'cashier':
+            # Show admin authentication dialog
+            from ui.components.admin_auth_dialog import AdminAuthDialog
+            auth_dialog = AdminAuthDialog(self, "clear the cart")
+            
+            if auth_dialog.exec_() != QDialog.Accepted:
+                return  # User cancelled or authentication failed
+        
+        # Proceed with clearing cart
         self.sale_controller.clear_cart()
         for widget in self.cart_items.values():
             self.cart_layout.removeWidget(widget)
             widget.deleteLater()
         self.cart_items.clear()
         self.update_totals()
+    
+    def clear_cart_after_save(self) -> None:
+        """Clear cart after saving order (no admin authentication required)."""
+        self.sale_controller.clear_cart()
+        for widget in self.cart_items.values():
+            self.cart_layout.removeWidget(widget)
+            widget.deleteLater()
+        self.cart_items.clear()
+        self.update_totals()
+    
+    def refresh_order_management(self) -> None:
+        """Refresh the order management widget to show new orders."""
+        try:
+            # Find the main window to access the order management widget
+            parent = self.parent()
+            while parent and not hasattr(parent, 'order_management_widget'):
+                parent = parent.parent()
+            
+            if parent and hasattr(parent, 'order_management_widget'):
+                order_widget = parent.order_management_widget
+                if hasattr(order_widget, 'refresh_orders'):
+                    order_widget.refresh_orders()
+                    logger.info("Order management widget refreshed after sale completion")
+                else:
+                    logger.warning("Order management widget does not have refresh_orders method")
+            else:
+                logger.warning("Could not find order management widget to refresh")
+        except Exception as e:
+            logger.error(f"Error refreshing order management widget: {str(e)}")
     
     def create_order(self) -> None:
         """Save a new order from cart items."""
@@ -609,8 +707,8 @@ class EnhancedCartWidget(QWidget):
         dialog = NewOrderDialog(self.user, self.sale_controller, self)
         if dialog.exec_() == QDialog.Accepted and dialog.order:
             QMessageBox.information(self, "Success", "Order saved successfully!")
-            # Clear cart after saving order
-            self.clear_cart()
+            # Clear cart after saving order (without admin auth for order saving)
+            self.clear_cart_after_save()
             # Emit signal to refresh order management
             self.order_saved.emit(dialog.order)
     
@@ -627,9 +725,12 @@ class EnhancedCartWidget(QWidget):
             try:
                 if self.sale_controller.complete_sale(self.user):
                     QMessageBox.information(self, "Success", "Sale completed successfully!")
-                    self.clear_cart()
+                    self.clear_cart_after_save()
+                    
+                    # Refresh order management widget to show new completed order
+                    self.refresh_order_management()
                 else:
-                    QMessageBox.warning(self, "Error", "Failed to complete sale. Please check stock levels and try again.")
+                    QMessageBox.warning(self, "Error", "Failed to complete sale. Please try again.")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"An error occurred during checkout: {str(e)}")
     

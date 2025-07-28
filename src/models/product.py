@@ -37,7 +37,6 @@ class Product(Base):
     description = Column(String)
     price = Column(Float, nullable=False)
     category_id = Column(Integer, ForeignKey('categories.id'))
-    stock = Column(Integer, default=0)
     barcode = Column(String, unique=True, nullable=True)
     image_path = Column(String)
     

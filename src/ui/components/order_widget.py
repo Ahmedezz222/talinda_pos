@@ -208,7 +208,11 @@ class OrderCard(QFrame):
             # Only emit signal for active orders
             if self.order.status == OrderStatus.ACTIVE:
                 self.order_clicked.emit(self.order)
-        super().mousePressEvent(event)
+        try:
+            super().mousePressEvent(event)
+        except RuntimeError:
+            # Widget has been deleted, ignore
+            pass
 
 
 class OrderEditDialog(QDialog):
