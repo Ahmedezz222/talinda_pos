@@ -47,9 +47,6 @@ build_exe_options = {
         "qrcode",
         "PIL",
         "openpyxl",
-        "pytest",
-        "pytest_qt",
-        "pytest_cov",
         "logging",
         "datetime",
         "pathlib",
@@ -61,6 +58,17 @@ build_exe_options = {
         "xml",
         "xml.etree",
         "xml.etree.ElementTree",
+        "getpass",
+        "enum",
+        "collections",
+        "itertools",
+        "functools",
+        "operator",
+        "re",
+        "hashlib",
+        "base64",
+        "urllib",
+        "urllib.parse",
     ],
     "excludes": [
         "tkinter",
@@ -84,6 +92,9 @@ build_exe_options = {
         "wheel",
         "virtualenv",
         "venv",
+        "pytest",
+        "pytest_qt",
+        "pytest_cov",
     ],
     "include_files": [
         (str(SRC_DIR / "resources"), "resources"),
@@ -94,7 +105,8 @@ build_exe_options = {
     ],
     "include_msvcr": True,
     "optimize": 2,
-    "build_exe": str(BASE_DIR / "build" / "exe.win-amd64-3.8"),
+    "zip_include_packages": ["*"],
+    "zip_exclude_packages": [],
 }
 
 # Add migration files
@@ -109,12 +121,17 @@ base = None
 if sys.platform == "win32":
     base = "Win32GUI"  # Use Win32GUI for Windows GUI applications
 
+# Check if icon exists
+icon_path = SRC_DIR / "resources" / "images" / "logo.ico"
+if not icon_path.exists():
+    icon_path = None
+
 executables = [
     Executable(
         script=str(SRC_DIR / "main.py"),
         base=base,
         target_name=f"{APP_NAME.replace(' ', '_')}.exe",
-        icon=str(SRC_DIR / "resources" / "images" / "logo.ico") if (SRC_DIR / "resources" / "images" / "logo.ico").exists() else None,
+        icon=str(icon_path) if icon_path else None,
         shortcut_name=APP_NAME,
         shortcut_dir="DesktopFolder",
     )
@@ -129,16 +146,6 @@ if CX_FREEZE_AVAILABLE:
         author=APP_AUTHOR,
         options={"build_exe": build_exe_options},
         executables=executables,
-        requires=[
-            "PyQt5>=5.15.9",
-            "SQLAlchemy>=2.0.19",
-            "bcrypt>=4.0.1",
-            "python-dotenv>=1.0.0",
-            "reportlab>=4.0.4",
-            "qrcode>=7.4.2",
-            "Pillow>=10.0.0",
-            "openpyxl>=3.1.2",
-        ],
     )
 else:
     print("cx_Freeze is not available. Cannot proceed with setup.")
