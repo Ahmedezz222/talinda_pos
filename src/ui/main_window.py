@@ -46,7 +46,9 @@ from ui.components.add_product_page import AddProductPage
 from ui.components.order_widget import OrderManagementWidget
 from ui.components import ShowProductsWindow
 from ui.components.pos_view import ModernPOSView
+from ui.components.language_selector import LanguageSelectorDialog
 from models.user import UserRole, User
+from utils.localization import tr, set_language, is_rtl
 
 
 class ModernPOSWidget(QWidget):
@@ -243,7 +245,7 @@ class ModernPOSWidget(QWidget):
         return section
     
     def create_products_section(self) -> QWidget:
-        """Create the products section with grid layout."""
+        """Create the products section with improved grid layout."""
         section = QGroupBox("🛍️ Items")
         section.setStyleSheet("""
             QGroupBox {
@@ -263,60 +265,74 @@ class ModernPOSWidget(QWidget):
         """)
         
         layout = QVBoxLayout(section)
-        layout.setSpacing(10)
+        layout.setSpacing(15)
         layout.setContentsMargins(15, 25, 15, 15)
         
-        # Back button (hidden initially)
+        # Back button (hidden initially) with improved styling
         self.back_btn = QPushButton("← Back to Categories")
         self.back_btn.setStyleSheet("""
             QPushButton {
-                background-color: #95a5a6;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #95a5a6, stop:1 #7f8c8d);
                 color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 15px;
-                font-size: 12px;
+                border: 2px solid #7f8c8d;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-size: 13px;
                 font-weight: bold;
+                margin-bottom: 10px;
             }
             QPushButton:hover {
-                background-color: #7f8c8d;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #7f8c8d, stop:1 #95a5a6);
+                border: 2px solid #6c7b7d;
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #6c7b7d, stop:1 #7f8c8d);
             }
         """)
         self.back_btn.clicked.connect(self.show_categories)
         self.back_btn.hide()
         layout.addWidget(self.back_btn)
         
-        # Items scroll area
+        # Items scroll area with improved styling
         self.products_scroll = QScrollArea()
         self.products_scroll.setWidgetResizable(True)
         self.products_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.products_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.products_scroll.setStyleSheet("""
             QScrollArea {
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                background-color: white;
+                border: 2px solid #e0e0e0;
+                border-radius: 8px;
+                background-color: #f8f9fa;
             }
             QScrollBar:vertical {
-                width: 8px;
+                width: 10px;
                 background: #f0f0f0;
-                border-radius: 4px;
+                border-radius: 5px;
+                margin: 2px;
             }
             QScrollBar::handle:vertical {
                 background: #c0c0c0;
-                border-radius: 4px;
-                min-height: 20px;
+                border-radius: 5px;
+                min-height: 30px;
+                margin: 2px;
             }
             QScrollBar::handle:vertical:hover {
                 background: #a0a0a0;
             }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
         """)
         
-        # Items container
+        # Items container with improved grid layout
         self.products_container = QWidget()
         self.products_layout = QGridLayout(self.products_container)
-        self.products_layout.setSpacing(12)
-        self.products_layout.setContentsMargins(15, 15, 15, 15)
+        self.products_layout.setSpacing(15)
+        self.products_layout.setContentsMargins(20, 20, 20, 20)
         
         self.products_scroll.setWidget(self.products_container)
         layout.addWidget(self.products_scroll)
@@ -361,7 +377,6 @@ class ModernPOSWidget(QWidget):
             self.show_categories()
         except Exception as e:
             self.logger.error(f"Error loading data: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to load data: {str(e)}")
     
     def show_categories(self):
         """Show categories as clickable items."""
@@ -375,10 +390,9 @@ class ModernPOSWidget(QWidget):
             categories = self.product_controller.get_categories()
         except Exception as e:
             self.logger.error(f"Failed to load categories: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to load categories: {str(e)}")
             return
         
-        # Category color scheme
+        # Category color scheme with Arabic categories
         category_colors = {
             'FOOD': {'bg': '#ff6b6b', 'text': 'white'},
             'DRINKS': {'bg': '#4ecdc4', 'text': 'white'},
@@ -398,21 +412,37 @@ class ModernPOSWidget(QWidget):
             'CUSTOM FOOD PRICE': {'bg': '#26de81', 'text': 'white'},
         }
         
-        # Calculate grid columns
-        available_width = max(400, self.width() - 400)
-        card_width = 200
-        max_cols = max(3, min(6, int(available_width / card_width)))
+        # Calculate responsive grid columns using helper function
+        card_width = 180  # Slightly smaller for better fit
+        card_height = 140  # Consistent height
+        spacing = 15  # Consistent spacing
+        
+        # Calculate max columns with proper spacing
+        max_cols = self.calculate_optimal_grid_columns(card_width, spacing)
         
         row = 0
         col = 0
         
         for category in categories:
-            category_name = category.name.upper()
+            category_name = category.name  # Use exact name, no uppercase conversion
+            
             if category_name in category_colors:
                 colors = category_colors[category_name]
-                btn = self.create_category_card(category.name, colors['bg'], colors['text'])
+                btn = self.create_category_card(
+                    category.name, 
+                    colors['bg'], 
+                    colors['text'], 
+                    card_width,
+                    card_height
+                )
             else:
-                btn = self.create_category_card(category.name, '#95a5a6', 'white')
+                btn = self.create_category_card(
+                    category.name, 
+                    '#95a5a6', 
+                    'white', 
+                    card_width,
+                    card_height
+                )
             
             self.products_layout.addWidget(btn, row, col)
             self.category_buttons[category.name] = btn
@@ -426,30 +456,38 @@ class ModernPOSWidget(QWidget):
         self.back_btn.hide()
         self.current_category = None
     
-    def create_category_card(self, text: str, bg_color: str, text_color: str) -> QPushButton:
-        """Create a category card that looks like a product card."""
-        btn = QPushButton(text)
-        btn.setFixedSize(200, 160)
+    def create_category_card(self, text: str, bg_color: str, text_color: str, width: int, height: int) -> QPushButton:
+        """Create a category card with improved styling and layout."""
+        btn = QPushButton()
+        btn.setFixedSize(width, height)
         btn.setCursor(Qt.PointingHandCursor)
         
-        # Modern styling with hover effects
+        # Create simple text without icon
+        btn.setText(text)
+        
+        # Enhanced styling with better visual hierarchy (Qt-compatible)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {bg_color};
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {bg_color}, stop:1 {self.darken_color(bg_color)});
                 color: {text_color};
-                border: none;
-                border-radius: 10px;
+                border: 2px solid {self.lighten_color(bg_color)};
+                border-radius: 12px;
                 font-size: 14px;
                 font-weight: bold;
                 padding: 10px;
                 text-align: center;
+                margin: 2px;
             }}
             QPushButton:hover {{
-                background-color: {self.lighten_color(bg_color)};
-                border: 2px solid #ffffff;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {self.lighten_color(bg_color)}, stop:1 {bg_color});
+                border: 3px solid white;
             }}
             QPushButton:pressed {{
-                background-color: {self.darken_color(bg_color)};
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {self.darken_color(bg_color)}, stop:1 {bg_color});
+                border: 2px solid {self.darken_color(bg_color)};
             }}
         """)
         
@@ -475,13 +513,12 @@ class ModernPOSWidget(QWidget):
                 products = self.product_controller.get_products()
         except Exception as e:
             self.logger.error(f"Failed to load products: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to load products: {str(e)}")
             return
         
-        # Calculate grid columns based on available width
-        available_width = max(400, self.width() - 400)
-        card_width = 200
-        max_cols = max(3, min(6, int(available_width / card_width)))
+        # Calculate responsive grid columns using helper function
+        card_width = 200  # Product cards can be larger
+        spacing = 15
+        max_cols = self.calculate_optimal_grid_columns(card_width, spacing)
         
         row = 0
         col = 0
@@ -530,6 +567,10 @@ class ModernPOSWidget(QWidget):
     
     def on_order_saved(self, order):
         """Handle order saved signal from cart widget."""
+        if order is None:
+            self.logger.warning("Order saved signal received with None order")
+            return
+        
         self.logger.info(f"Order saved from POS widget: {order.order_number}")
         # Forward the signal to the main window if it exists
         if hasattr(self, 'parent') and self.parent():
@@ -542,15 +583,24 @@ class ModernPOSWidget(QWidget):
     def resizeEvent(self, event):
         """Handle resize events for responsive design."""
         super().resizeEvent(event)
-        # Reload current view to adjust grid layout
-        QTimer.singleShot(100, self.reload_current_view)
+        # Reload current view to adjust grid layout with a slight delay
+        QTimer.singleShot(150, self.reload_current_view)
     
     def reload_current_view(self):
         """Reload the current view (categories or products)."""
-        if self.current_category:
-            self.load_products()
-        else:
-            self.show_categories()
+        try:
+            if self.current_category:
+                self.load_products()
+            else:
+                self.show_categories()
+        except Exception as e:
+            self.logger.error(f"Error reloading current view: {str(e)}")
+    
+    def calculate_optimal_grid_columns(self, card_width: int, spacing: int = 15) -> int:
+        """Calculate optimal number of columns for the current window size."""
+        available_width = max(400, self.width() - 400)
+        max_cols = max(3, min(5, int((available_width - spacing) / (card_width + spacing))))
+        return max_cols
     
     def lighten_color(self, color: str) -> str:
         """Lighten a hex color."""
@@ -681,6 +731,11 @@ class ModernAdminPanelWidget(QWidget):
         edit_btn.clicked.connect(self.edit_user)
         buttons_layout.addWidget(edit_btn)
         
+        change_password_btn = QPushButton("🔐 Change Password")
+        change_password_btn.setStyleSheet(self.get_button_style("#f39c12"))
+        change_password_btn.clicked.connect(self.change_password)
+        buttons_layout.addWidget(change_password_btn)
+        
         delete_btn = QPushButton("🗑️ Delete User")
         delete_btn.setStyleSheet(self.get_button_style("#e74c3c"))
         delete_btn.clicked.connect(self.delete_user)
@@ -688,18 +743,38 @@ class ModernAdminPanelWidget(QWidget):
         
         layout.addLayout(buttons_layout)
         
+        # User count display
+        user_count_layout = QHBoxLayout()
+        user_count_label = QLabel("Total Users:")
+        user_count_label.setStyleSheet("font-weight: bold; color: #2c3e50;")
+        self.users_count_label = QLabel("0")
+        self.users_count_label.setStyleSheet("font-weight: bold; color: #27ae60; font-size: 14px;")
+        user_count_layout.addWidget(user_count_label)
+        user_count_layout.addWidget(self.users_count_label)
+        user_count_layout.addStretch(1)
+        layout.addLayout(user_count_layout)
+        
         # Users table
         self.users_table = QTableWidget()
         self.users_table.setColumnCount(5)
         self.users_table.setHorizontalHeaderLabels([
             "ID", "Username", "Role", "Status", "Actions"
         ])
+        
+        # Set column widths
+        self.users_table.setColumnWidth(0, 50)   # ID
+        self.users_table.setColumnWidth(1, 120)  # Username
+        self.users_table.setColumnWidth(2, 100)  # Role
+        self.users_table.setColumnWidth(3, 80)   # Status
+        self.users_table.setColumnWidth(4, 100)  # Actions
+        
         self.users_table.setStyleSheet("""
             QTableWidget {
                 border: 1px solid #e0e0e0;
                 border-radius: 6px;
                 background-color: white;
                 gridline-color: #f0f0f0;
+                selection-background-color: #e3f2fd;
             }
             QHeaderView::section {
                 background-color: #f8f9fa;
@@ -707,6 +782,15 @@ class ModernAdminPanelWidget(QWidget):
                 border: none;
                 border-bottom: 1px solid #e0e0e0;
                 font-weight: bold;
+                color: #2c3e50;
+            }
+            QTableWidget::item {
+                padding: 4px;
+                border-bottom: 1px solid #f0f0f0;
+            }
+            QTableWidget::item:selected {
+                background-color: #e3f2fd;
+                color: #2c3e50;
             }
         """)
         layout.addWidget(self.users_table)
@@ -806,7 +890,6 @@ class ModernAdminPanelWidget(QWidget):
             
         except Exception as e:
             self.logger.error(f"Error showing daily sales report: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to show daily sales report: {str(e)}")
     
     def show_shift_reports(self):
         """Show shift reports dialog."""
@@ -823,7 +906,6 @@ class ModernAdminPanelWidget(QWidget):
             
         except Exception as e:
             self.logger.error(f"Error showing shift reports: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to show shift reports: {str(e)}")
     
     def get_button_style(self, color: str) -> str:
         """Get button styling."""
@@ -848,14 +930,38 @@ class ModernAdminPanelWidget(QWidget):
     def load_users(self):
         """Load users into the table."""
         try:
+            if not hasattr(self, 'users_table') or not self.users_table:
+                return
+                
             users = self.auth_controller.session.query(User).all()
             self.users_table.setRowCount(len(users))
             
             for row, user in enumerate(users):
-                self.users_table.setItem(row, 0, QTableWidgetItem(str(user.id)))
-                self.users_table.setItem(row, 1, QTableWidgetItem(user.username))
-                self.users_table.setItem(row, 2, QTableWidgetItem(user.role.value.title()))
-                self.users_table.setItem(row, 3, QTableWidgetItem("Active" if user.active else "Inactive"))
+                # ID
+                id_item = QTableWidgetItem(str(user.id))
+                id_item.setTextAlignment(Qt.AlignCenter)
+                self.users_table.setItem(row, 0, id_item)
+                
+                # Username
+                username_item = QTableWidgetItem(user.username)
+                self.users_table.setItem(row, 1, username_item)
+                
+                # Role
+                role_item = QTableWidgetItem(user.role.value.title())
+                role_item.setTextAlignment(Qt.AlignCenter)
+                self.users_table.setItem(row, 2, role_item)
+                
+                # Status
+                status_text = "Active" if user.active else "Inactive"
+                status_item = QTableWidgetItem(status_text)
+                status_item.setTextAlignment(Qt.AlignCenter)
+                if user.active:
+                    status_item.setBackground(QColor("#d4edda"))
+                    status_item.setForeground(QColor("#155724"))
+                else:
+                    status_item.setBackground(QColor("#f8d7da"))
+                    status_item.setForeground(QColor("#721c24"))
+                self.users_table.setItem(row, 3, status_item)
                 
                 # Actions button
                 actions_btn = QPushButton("Actions")
@@ -867,43 +973,73 @@ class ModernAdminPanelWidget(QWidget):
                         border-radius: 4px;
                         padding: 5px 10px;
                         font-size: 12px;
+                        min-width: 60px;
+                    }
+                    QPushButton:hover {
+                        background-color: #7f8c8d;
                     }
                 """)
                 self.users_table.setCellWidget(row, 4, actions_btn)
             
-            self.users_count_label.setText(str(len(users)))
+            # Update user count
+            if hasattr(self, 'users_count_label'):
+                self.users_count_label.setText(str(len(users)))
             
         except Exception as e:
             self.logger.error(f"Failed to load users: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to load users: {str(e)}")
     
     def add_user(self):
         """Add a new user."""
         try:
-            username, ok = QInputDialog.getText(self, "Add User", "Username:")
-            if ok and username:
-                password, ok = QInputDialog.getText(self, "Add User", "Password:", QLineEdit.Password)
-                if ok and password:
-                    role, ok = QInputDialog.getItem(self, "Add User", "Role:", ["admin", "cashier"], 0, False)
-                    if ok:
-                        # Create user manually
-                        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                        user = User(username=username, password_hash=password_hash, role=UserRole(role), active=1)
-                        self.auth_controller.session.add(user)
-                        self.auth_controller.session.commit()
-                        self.load_users()
-                        QMessageBox.information(self, "Success", "User created successfully!")
+            from ui.components.user_edit_dialog import UserEditDialog
+            dialog = UserEditDialog(parent=self)
+            if dialog.exec_() == QDialog.Accepted:
+                self.load_users()
         except Exception as e:
             self.logger.error(f"Failed to add user: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to add user: {str(e)}")
     
     def edit_user(self):
         """Edit selected user."""
         current_row = self.users_table.currentRow()
         if current_row >= 0:
-            user_id = int(self.users_table.item(current_row, 0).text())
-            # Implement edit functionality
-            QMessageBox.information(self, "Info", "Edit functionality to be implemented")
+            try:
+                user_id = int(self.users_table.item(current_row, 0).text())
+                user = self.auth_controller.session.query(User).filter_by(id=user_id).first()
+                
+                if user:
+                    from ui.components.user_edit_dialog import UserEditDialog
+                    dialog = UserEditDialog(user=user, parent=self)
+                    if dialog.exec_() == QDialog.Accepted:
+                        self.load_users()
+                else:
+                    pass  # User not found
+            except Exception as e:
+                self.logger.error(f"Failed to edit user: {str(e)}")
+        else:
+            pass  # No user selected
+    
+    def change_password(self):
+        """Change password for selected user."""
+        current_row = self.users_table.currentRow()
+        if current_row >= 0:
+            try:
+                user_id = int(self.users_table.item(current_row, 0).text())
+                username = self.users_table.item(current_row, 1).text()
+                user = self.auth_controller.session.query(User).filter_by(id=user_id).first()
+                
+                if user:
+                    from ui.components.user_edit_dialog import UserEditDialog
+                    dialog = UserEditDialog(user=user, parent=self)
+                    # Focus on password fields
+                    dialog.password_input.setFocus()
+                    if dialog.exec_() == QDialog.Accepted:
+                        self.load_users()
+                else:
+                    pass  # User not found
+            except Exception as e:
+                self.logger.error(f"Failed to change password: {str(e)}")
+        else:
+            pass  # No user selected
     
     def delete_user(self):
         """Delete selected user."""
@@ -912,25 +1048,16 @@ class ModernAdminPanelWidget(QWidget):
             user_id = int(self.users_table.item(current_row, 0).text())
             username = self.users_table.item(current_row, 1).text()
             
-            reply = QMessageBox.question(
-                self, "Confirm Delete", 
-                f"Are you sure you want to delete user '{username}'?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            
-            if reply == QMessageBox.Yes:
-                try:
-                    user = self.auth_controller.session.query(User).filter_by(id=user_id).first()
-                    if user:
-                        self.auth_controller.session.delete(user)
-                        self.auth_controller.session.commit()
-                        self.load_users()
-                        QMessageBox.information(self, "Success", "User deleted successfully!")
-                    else:
-                        QMessageBox.warning(self, "Error", "User not found!")
-                except Exception as e:
-                    self.logger.error(f"Failed to delete user: {str(e)}")
-                    QMessageBox.warning(self, "Error", f"Failed to delete user: {str(e)}")
+            try:
+                user = self.auth_controller.session.query(User).filter_by(id=user_id).first()
+                if user:
+                    self.auth_controller.session.delete(user)
+                    self.auth_controller.session.commit()
+                    self.load_users()
+                else:
+                    pass  # User not found
+            except Exception as e:
+                self.logger.error(f"Failed to delete user: {str(e)}")
     
     def lighten_color(self, color: str) -> str:
         """Lighten a hex color."""
@@ -975,7 +1102,7 @@ class ModernMainWindow(QMainWindow):
     
     def init_ui(self):
         """Initialize the main window UI."""
-        self.setWindowTitle('Talinda POS System')
+        self.setWindowTitle(tr("main_window.title", "Talinda POS System"))
         self.setMinimumSize(1400, 900)
         self.resize(1600, 1000)
         
@@ -1046,19 +1173,19 @@ class ModernMainWindow(QMainWindow):
         
         # Add menu items
         menu_items = [
-            ("🛒 POS System", "Main point of sale interface"),
-            ("📋 Order Management", "Manage orders and transactions"),
+            ("🛒", tr("pos.title", "Point of Sale"), "Main point of sale interface"),
+            ("📋", tr("orders.title", "Orders"), "Manage orders and transactions"),
         ]
         
         if self.user.role.value == 'admin':
             menu_items.extend([
-                ("⚙️ Admin Panel", "User and system management"),
-                ("➕ Add Product", "Add new products to inventory"),
-                ("📦 Show Products", "View and manage products"),
+                ("⚙️", tr("main_window.admin_panel", "Admin Panel"), "User and system management"),
+                ("➕", tr("products.add_product", "Add Product"), "Add new products to inventory"),
+                ("📦", tr("products.title", "Products"), "View and manage products"),
             ])
         
-        for text, tooltip in menu_items:
-            item = QListWidgetItem(text)
+        for icon, text, tooltip in menu_items:
+            item = QListWidgetItem(f"{icon} {text}")
             item.setToolTip(tooltip)
             sidebar.addItem(item)
         
@@ -1094,7 +1221,6 @@ class ModernMainWindow(QMainWindow):
                 self.stacked_widget.addWidget(self.add_product_page)
             except Exception as e:
                 self.logger.error(f"Failed to initialize Add Product page: {str(e)}")
-                QMessageBox.warning(self, "Error", f"Failed to initialize Add Product page: {str(e)}")
     
     def setup_menu(self):
         """Setup the application menu."""
@@ -1136,6 +1262,16 @@ class ModernMainWindow(QMainWindow):
             admin_action = QAction('⚙️ Admin Panel', self)
             admin_action.triggered.connect(lambda: self.switch_page(2))
             tools_menu.addAction(admin_action)
+        
+        # Change Password menu
+        change_password_action = QAction('🔐 Change My Password', self)
+        change_password_action.triggered.connect(self.change_my_password)
+        tools_menu.addAction(change_password_action)
+        
+        # Language menu
+        language_action = QAction('🌐 Language', self)
+        language_action.triggered.connect(self.show_language_selector)
+        tools_menu.addAction(language_action)
         
         # Help menu
         help_menu = menubar.addMenu('❓ Help')
@@ -1207,7 +1343,6 @@ class ModernMainWindow(QMainWindow):
                     return
         except Exception as e:
             self.logger.error(f"Error switching page: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to switch page: {str(e)}")
     
     def show_products_window(self):
         """Show the products window."""
@@ -1217,18 +1352,15 @@ class ModernMainWindow(QMainWindow):
             self.sidebar.setCurrentRow(2)  # Go back to Admin Panel
         except Exception as e:
             self.logger.error(f"Failed to show products: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to show products: {str(e)}")
 
     def handle_add_product(self, product_data):
         """Handle product addition."""
         try:
             self.product_controller.add_product(**product_data)
-            QMessageBox.information(self, "Success", "Product added successfully!")
         except ValueError as e:
-            QMessageBox.warning(self, "Validation Error", str(e))
+            self.logger.error(f"Validation error: {str(e)}")
         except Exception as e:
             self.logger.error(f"Failed to add product: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to add product: {str(e)}")
     
     def new_sale(self):
         """Start a new sale."""
@@ -1242,22 +1374,348 @@ class ModernMainWindow(QMainWindow):
     def on_sale_completed(self, sale_data):
         """Handle sale completion."""
         self.logger.info("Sale completed")
-        QMessageBox.information(self, "Success", "Sale completed successfully!")
     
     def on_order_saved(self, order):
         """Handle order saved signal from cart widget."""
+        if order is None:
+            self.logger.warning("Order saved signal received with None order")
+            return
+        
         self.logger.info(f"Order saved: {order.order_number}")
         # Refresh the order management widget to show the latest order
         if hasattr(self, 'order_management_widget') and self.order_management_widget:
             self.order_management_widget.refresh_orders()
-        QMessageBox.information(self, "Success", f"Order {order.order_number} saved successfully!")
+        # Note: Success message is already shown by the cart widget, so we don't show it again here
     
     def show_about(self):
         """Show about dialog."""
-        QMessageBox.about(self, "About Talinda POS", 
-                         "Talinda POS System v2.0.0\n\n"
-                         "A modern Point of Sale system built with PyQt5.\n"
-                         "© 2024 Talinda POS Team")
+        pass  # About dialog removed
+    
+    def show_language_selector(self):
+        """Show language selector dialog."""
+        dialog = LanguageSelectorDialog(self)
+        dialog.language_selector.language_changed.connect(self.on_language_changed)
+        dialog.exec()
+    
+    def change_my_password(self):
+        """Change current user's password."""
+        try:
+            from ui.components.user_edit_dialog import UserEditDialog
+            dialog = UserEditDialog(user=self.user, parent=self)
+            # Focus on password fields
+            dialog.password_input.setFocus()
+            if dialog.exec_() == QDialog.Accepted:
+                pass  # Password changed successfully
+        except Exception as e:
+            self.logger.error(f"Failed to change password: {str(e)}")
+    
+    def on_language_changed(self, language: str):
+        """Handle language change."""
+        try:
+            # Update the application language
+            set_language(language)
+            
+            # Refresh all UI elements
+            self.refresh_ui_for_language_change()
+            
+        except Exception as e:
+            self.logger.error(f"Error changing language: {str(e)}")
+    
+    def refresh_ui_for_language_change(self):
+        """Refresh all UI elements after language change."""
+        try:
+            # Update window title
+            self.setWindowTitle(tr("main_window.title", "Talinda POS System"))
+            
+            # Update menu items
+            self.refresh_menu_items()
+            
+            # Update sidebar items
+            self.refresh_sidebar_items()
+            
+            # Update status bar
+            self.refresh_status_bar()
+            
+            # Update current page content
+            self.refresh_current_page()
+            
+        except Exception as e:
+            self.logger.error(f"Error refreshing UI for language change: {str(e)}")
+    
+    def refresh_menu_items(self):
+        """Refresh menu items with new language."""
+        try:
+            menubar = self.menuBar()
+            
+            # Update File menu
+            file_menu = menubar.actions()[0].menu()  # First menu is File
+            if file_menu:
+                file_menu.setTitle(f"📁 {tr('main_window.file_menu', 'File')}")
+                for action in file_menu.actions():
+                    if "Exit" in action.text():
+                        action.setText(f"🚪 {tr('main_window.exit', 'Exit')}")
+                    elif "New Sale" in action.text():
+                        action.setText(f"🆕 {tr('pos.new_sale', 'New Sale')}")
+            
+            # Update Tools menu
+            tools_menu = menubar.actions()[1].menu()  # Second menu is Tools
+            if tools_menu:
+                tools_menu.setTitle(f"🔧 {tr('common.tools', 'Tools')}")
+                for action in tools_menu.actions():
+                    if "Language" in action.text():
+                        action.setText(f"🌐 {tr('common.language', 'Language')}")
+                    elif "Admin Panel" in action.text():
+                        action.setText(f"⚙️ {tr('main_window.admin_panel', 'Admin Panel')}")
+            
+            # Update Help menu
+            help_menu = menubar.actions()[2].menu()  # Third menu is Help
+            if help_menu:
+                help_menu.setTitle(f"❓ {tr('main_window.help_menu', 'Help')}")
+                for action in help_menu.actions():
+                    if "About" in action.text():
+                        action.setText(f"ℹ️ {tr('main_window.about', 'About')}")
+                
+        except Exception as e:
+            self.logger.error(f"Error refreshing menu items: {str(e)}")
+            # If menu refresh fails, try to recreate the entire menu
+            try:
+                menubar.clear()
+                self.setup_menu()
+            except Exception as e2:
+                self.logger.error(f"Error recreating menu: {str(e2)}")
+    
+    def refresh_sidebar_items(self):
+        """Refresh sidebar items with new language."""
+        try:
+            if hasattr(self, 'sidebar'):
+                # Clear and recreate sidebar items with new translations
+                self.sidebar.clear()
+                
+                # Add menu items with updated translations
+                menu_items = [
+                    ("🛒", tr("pos.title", "Point of Sale"), "Main point of sale interface"),
+                    ("📋", tr("orders.title", "Orders"), "Manage orders and transactions"),
+                ]
+                
+                if self.user.role.value == 'admin':
+                    menu_items.extend([
+                        ("⚙️", tr("main_window.admin_panel", "Admin Panel"), "User and system management"),
+                        ("➕", tr("products.add_product", "Add Product"), "Add new products to inventory"),
+                        ("📦", tr("products.title", "Products"), "View and manage products"),
+                    ])
+                
+                for icon, text, tooltip in menu_items:
+                    item = QListWidgetItem(f"{icon} {text}")
+                    item.setToolTip(tooltip)
+                    self.sidebar.addItem(item)
+                
+                # Restore the current selection
+                current_index = min(self.sidebar.count() - 1, 0)  # Default to first item
+                self.sidebar.setCurrentRow(current_index)
+                        
+        except Exception as e:
+            self.logger.error(f"Error refreshing sidebar items: {str(e)}")
+    
+    def refresh_status_bar(self):
+        """Refresh status bar with new language."""
+        try:
+            status_bar = self.statusBar()
+            if status_bar:
+                # Clear and recreate status bar
+                status_bar.clearMessage()
+                
+                # Remove all widgets
+                for widget in status_bar.findChildren(QLabel):
+                    widget.deleteLater()
+                
+                # Recreate status bar content
+                # User info
+                user_info = QLabel(f"👤 {self.user.username} ({self.user.role.value.title()})")
+                status_bar.addWidget(user_info)
+                
+                status_bar.addPermanentWidget(QLabel("|"))
+                
+                # Opening amount (for cashiers)
+                if self.opening_amount is not None:
+                    opening_info = QLabel(f"💰 {tr('shifts.opening_amount', 'Opening Amount')}: ${self.opening_amount:.2f}")
+                    status_bar.addPermanentWidget(opening_info)
+                
+                status_bar.addPermanentWidget(QLabel("|"))
+                
+                # Current time
+                self.time_label = QLabel()
+                status_bar.addPermanentWidget(self.time_label)
+                self.update_time()
+                    
+        except Exception as e:
+            self.logger.error(f"Error refreshing status bar: {str(e)}")
+    
+    def refresh_current_page(self):
+        """Refresh the current page content."""
+        try:
+            current_index = self.sidebar.currentRow()
+            
+            # Refresh based on current page
+            if current_index == 0:  # POS
+                if hasattr(self, 'pos_widget'):
+                    self.refresh_pos_widget()
+            elif current_index == 1:  # Orders
+                if hasattr(self, 'order_management_widget'):
+                    self.refresh_order_widget()
+            elif current_index == 2:  # Admin Panel
+                if hasattr(self, 'admin_panel_widget'):
+                    self.refresh_admin_widget()
+            elif current_index == 3:  # Add Product
+                if hasattr(self, 'add_product_page'):
+                    self.refresh_add_product_page()
+            elif current_index == 4:  # Show Products
+                # This is handled by the dialog, no need to refresh
+                pass
+                    
+        except Exception as e:
+            self.logger.error(f"Error refreshing current page: {str(e)}")
+    
+    def refresh_add_product_page(self):
+        """Refresh add product page elements."""
+        try:
+            if hasattr(self, 'add_product_page'):
+                # Update form labels and buttons
+                for widget in self.add_product_page.findChildren(QLabel):
+                    if "Product Name" in widget.text():
+                        widget.setText(tr("products.product_name", "Product Name"))
+                    elif "Product Code" in widget.text():
+                        widget.setText(tr("products.product_code", "Product Code"))
+                    elif "Price" in widget.text():
+                        widget.setText(tr("products.price", "Price"))
+                    elif "Category" in widget.text():
+                        widget.setText(tr("products.category", "Category"))
+                    elif "Stock" in widget.text():
+                        widget.setText(tr("products.stock", "Stock"))
+                    elif "Description" in widget.text():
+                        widget.setText(tr("products.description", "Description"))
+                
+                for widget in self.add_product_page.findChildren(QPushButton):
+                    if "Save" in widget.text():
+                        widget.setText(tr("common.save", "Save"))
+                    elif "Cancel" in widget.text():
+                        widget.setText(tr("common.cancel", "Cancel"))
+                        
+        except Exception as e:
+            self.logger.error(f"Error refreshing add product page: {str(e)}")
+    
+    def refresh_pos_widget(self):
+        """Refresh POS widget elements."""
+        try:
+            if hasattr(self, 'pos_widget'):
+                # Update POS widget title and labels
+                for widget in self.pos_widget.findChildren(QLabel):
+                    if "Point of Sale" in widget.text():
+                        widget.setText(tr("pos.title", "Point of Sale"))
+                    elif "Total" in widget.text() and ":" in widget.text():
+                        widget.setText(f"{tr('pos.total', 'Total')}:")
+                    elif "Subtotal" in widget.text() and ":" in widget.text():
+                        widget.setText(f"{tr('pos.subtotal', 'Subtotal')}:")
+                    elif "Tax" in widget.text() and ":" in widget.text():
+                        widget.setText(f"{tr('pos.tax', 'Tax')}:")
+                    elif "Discount" in widget.text() and ":" in widget.text():
+                        widget.setText(f"{tr('pos.discount', 'Discount')}:")
+                    elif "Grand Total" in widget.text() and ":" in widget.text():
+                        widget.setText(f"{tr('pos.grand_total', 'Grand Total')}:")
+                
+                # Update buttons
+                for widget in self.pos_widget.findChildren(QPushButton):
+                    if "Add to Cart" in widget.text():
+                        widget.setText(tr("pos.add_to_cart", "Add to Cart"))
+                    elif "Clear Cart" in widget.text():
+                        widget.setText(tr("pos.clear_cart", "Clear Cart"))
+                    elif "Checkout" in widget.text():
+                        widget.setText(tr("pos.checkout", "Checkout"))
+                    elif "Complete Sale" in widget.text():
+                        widget.setText(tr("pos.complete_sale", "Complete Sale"))
+                    elif "Cancel Sale" in widget.text():
+                        widget.setText(tr("pos.cancel_sale", "Cancel Sale"))
+                    
+        except Exception as e:
+            self.logger.error(f"Error refreshing POS widget: {str(e)}")
+    
+    def refresh_order_widget(self):
+        """Refresh order management widget elements."""
+        try:
+            if hasattr(self, 'order_management_widget'):
+                # Update order widget title and labels
+                for widget in self.order_management_widget.findChildren(QLabel):
+                    if "Orders" in widget.text() and "Management" in widget.text():
+                        widget.setText(tr("orders.title", "Orders"))
+                    elif "Order ID" in widget.text():
+                        widget.setText(tr("orders.order_id", "Order ID"))
+                    elif "Date" in widget.text():
+                        widget.setText(tr("orders.date", "Date"))
+                    elif "Time" in widget.text():
+                        widget.setText(tr("orders.time", "Time"))
+                    elif "Status" in widget.text():
+                        widget.setText(tr("orders.status", "Status"))
+                    elif "Total" in widget.text():
+                        widget.setText(tr("orders.total", "Total"))
+                    elif "Actions" in widget.text():
+                        widget.setText(tr("orders.actions", "Actions"))
+                
+                # Update buttons
+                for widget in self.order_management_widget.findChildren(QPushButton):
+                    if "View" in widget.text():
+                        widget.setText(tr("orders.view", "View"))
+                    elif "Edit" in widget.text():
+                        widget.setText(tr("orders.edit", "Edit"))
+                    elif "Delete" in widget.text():
+                        widget.setText(tr("orders.delete", "Delete"))
+                    elif "Complete" in widget.text():
+                        widget.setText(tr("orders.complete", "Complete"))
+                    elif "Cancel" in widget.text():
+                        widget.setText(tr("orders.cancel", "Cancel"))
+                    
+        except Exception as e:
+            self.logger.error(f"Error refreshing order widget: {str(e)}")
+    
+    def refresh_admin_widget(self):
+        """Refresh admin panel widget elements."""
+        try:
+            if hasattr(self, 'admin_panel_widget'):
+                # Update admin widget title and labels
+                for widget in self.admin_panel_widget.findChildren(QLabel):
+                    if "Admin Panel" in widget.text():
+                        widget.setText(tr("main_window.admin_panel", "Admin Panel"))
+                    elif "User Management" in widget.text():
+                        widget.setText(tr("admin.user_management", "User Management"))
+                    elif "System Information" in widget.text():
+                        widget.setText(tr("admin.system_info", "System Information"))
+                    elif "Reports" in widget.text():
+                        widget.setText(tr("reports.title", "Reports"))
+                
+                # Update buttons
+                for widget in self.admin_panel_widget.findChildren(QPushButton):
+                    if "Add User" in widget.text():
+                        widget.setText(tr("admin.add_user", "Add User"))
+                    elif "Edit User" in widget.text():
+                        widget.setText(tr("admin.edit_user", "Edit User"))
+                    elif "Delete User" in widget.text():
+                        widget.setText(tr("admin.delete_user", "Delete User"))
+                    elif "Daily Sales Report" in widget.text():
+                        widget.setText(tr("reports.daily_report", "Daily Report"))
+                    elif "Shift Reports" in widget.text():
+                        widget.setText(tr("reports.shift_reports", "Shift Reports"))
+                    
+        except Exception as e:
+            self.logger.error(f"Error refreshing admin widget: {str(e)}")
+    
+    def refresh_reports_widget(self):
+        """Refresh reports widget elements."""
+        try:
+            if hasattr(self, 'reports_widget'):
+                # Update reports widget title and labels
+                if hasattr(self.reports_widget, 'title_label'):
+                    self.reports_widget.title_label.setText(tr("reports.title", "Reports"))
+                    
+        except Exception as e:
+            self.logger.error(f"Error refreshing reports widget: {str(e)}")
     
     def update_time(self):
         """Update the time display."""

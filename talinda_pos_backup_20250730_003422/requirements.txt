@@ -1,0 +1,35 @@
+# Core PyQt5 dependencies
+PyQt5>=5.15.9
+PyQt5-Qt5>=5.15.2
+PyQt5-sip>=12.12.1
+
+# Database
+SQLAlchemy>=2.0.19
+
+# Security
+bcrypt>=4.0.1
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Reporting and QR codes
+reportlab>=4.0.4
+qrcode>=7.4.2
+Pillow>=10.0.0
+
+# Excel reporting
+openpyxl>=3.1.2
+
+# Testing
+pytest>=7.4.0
+pytest-qt>=4.2.0
+pytest-cov>=4.1.0
+
+# Code quality
+black>=23.7.0
+pylint>=2.17.4
+flake8>=6.0.0
+mypy>=1.5.0
+
+# Development tools
+pre-commit>=3.3.0

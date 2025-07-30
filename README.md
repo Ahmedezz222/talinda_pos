@@ -39,11 +39,44 @@ A modern, feature-rich Point of Sale system built with Python and PyQt5.
    pip install -r requirements.txt
    ```
 
-## Running the Application
+## Quick Start
 
+### 1. Setup (First Time Only)
+```bash
+python setup_for_new_device.py
 ```
+
+### 2. Verify Setup
+```bash
+python verify_admin_user.py
+```
+
+### 3. Run the Application
+```bash
 python src/main.py
 ```
+
+### 4. Login with Default Credentials
+- **Username:** `admin`
+- **Password:** `admin123`
+
+## Default Users
+
+The system comes with pre-configured default users:
+
+**Admin User:**
+- Username: `admin`
+- Password: `admin123`
+- Role: Administrator
+
+**Cashier User:**
+- Username: `cashier`
+- Password: `cashier123`
+- Role: Cashier
+
+⚠️ **Important:** Change these default passwords after first login!
+
+For detailed instructions, see [ADMIN_USER_GUIDE.md](ADMIN_USER_GUIDE.md)
 
 ## Development
 

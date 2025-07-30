@@ -1,0 +1,43 @@
+# Talinda POS Configuration
+# =========================
+# Copy this file to .env and modify as needed
+
+# Application Settings
+APP_NAME=Talinda POS
+APP_VERSION=2.0.0
+APP_AUTHOR=Talinda POS Team
+ENVIRONMENT=development
+
+# Database Settings
+DATABASE_URL=sqlite:///pos_database.db
+DATABASE_ECHO=false
+
+# Logging Settings
+LOG_LEVEL=INFO
+LOG_FILE=logs/talinda_pos.log
+LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+
+# UI Settings
+WINDOW_WIDTH=1200
+WINDOW_HEIGHT=800
+THEME=default
+
+# Security Settings
+SESSION_TIMEOUT=3600
+MAX_LOGIN_ATTEMPTS=3
+PASSWORD_MIN_LENGTH=8
+
+# File Paths
+CSS_FILE=resources/styles/main.qss
+LOGO_FILE=resources/images/logo.png
+
+# Color Scheme
+PRIMARY_COLOR=#1976d2
+SECONDARY_COLOR=#424242
+SUCCESS_COLOR=#4caf50
+ERROR_COLOR=#f44336
+WARNING_COLOR=#ff9800
+
+# Development Settings (only used in development environment)
+DEBUG=true
+SHOW_DEBUG_INFO=false 
