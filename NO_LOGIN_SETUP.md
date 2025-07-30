@@ -10,15 +10,15 @@ The Talinda POS application has been configured to open without any login authen
 - If no users exist, authentication is bypassed
 - If users exist, normal authentication flow is used
 
-### 2. Temporary Admin User
-- When no users exist, a temporary admin user is created in memory
-- This temporary user has full admin privileges
-- No database entry is created for the temporary user
+### 2. Authentication Flow
+- **No Users**: Creates temporary admin user in memory, opens directly
+- **Users Exist**: Shows login dialog, requires proper authentication
+- **After Adding Users**: Automatically switches to normal authentication
 
-### 3. Direct Access
-- Application opens directly to the main window
-- No login dialog is shown
-- Full access to all features including admin panel
+### 3. User Management
+- Add users through admin panel when no users exist
+- Once users are added, restart application
+- Login dialog will appear for all subsequent starts
 
 ## Changes Made
 
@@ -73,14 +73,15 @@ The Talinda POS application has been configured to open without any login authen
 
 ### After Adding Users
 1. **Restart Application**:
+   - **Login dialog will automatically appear**
    - Normal authentication flow will be used
-   - Login dialog will appear
    - Use created user credentials
 
 2. **Normal Operation**:
    - Login with created users
    - Role-based access control
    - Standard authentication flow
+   - **Login required for all future starts**
 
 ## Benefits
 
@@ -106,11 +107,12 @@ The Talinda POS application has been configured to open without any login authen
 def run_authentication(self):
     # Check if any users exist in database
     if no_users_exist():
-        # Create temporary admin user
+        # Create temporary admin user for initial setup
         temp_user = create_temporary_admin()
         return temp_user, None
     else:
-        # Use normal authentication
+        # Users exist - show login dialog
+        show_login_dialog()
         return normal_login_flow()
 ```
 
@@ -158,10 +160,18 @@ else:
    ```
 
 ### Expected Behavior
+
+**When No Users Exist:**
 - ✅ No login dialog appears
 - ✅ Application opens directly
 - ✅ Full admin access available
 - ✅ Can add users through admin panel
+
+**When Users Exist:**
+- ✅ Login dialog appears
+- ✅ Authentication required
+- ✅ Normal login flow
+- ✅ Role-based access control
 
 ## Security Considerations
 

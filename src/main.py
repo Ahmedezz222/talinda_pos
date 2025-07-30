@@ -40,7 +40,7 @@ from models.user import Shift, ShiftStatus
 from init_database import init_database
 from utils.background_tasks import BackgroundTaskManager
 from utils.daily_reset_task import DailyResetTask
-from database.db_config import safe_commit
+from database.db_config import safe_commit, Session
 from utils.localization import tr, set_language, is_rtl
 
 
@@ -824,31 +824,54 @@ class ApplicationManager:
     def run_authentication(self) -> Optional[Tuple]:
         """Run the authentication process."""
         try:
-            # Skip authentication and create a temporary admin user
-            self.logger.info("Skipping authentication - creating temporary admin user")
+            # Check if any users exist in the database
+            from models.user import User
+            session = Session()
+            any_user = session.query(User).first()
+            session.close()
             
-            # Create a temporary admin user for initial setup
-            from models.user import User, UserRole
-            import bcrypt
-            
-            # Create temporary admin user
-            password_hash = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            temp_user = User(
-                username='admin',
-                password_hash=password_hash,
-                role=UserRole.ADMIN,
-                full_name='System Administrator',
-                active=1
-            )
-            
-            # Set the current user in auth controller
-            auth_controller = AuthController()
-            auth_controller.current_user = temp_user
-            
-            self.logger.info("Created temporary admin user for initial setup")
-            
-            # Return the temporary user with no opening amount (admin doesn't need shift)
-            return temp_user, None
+            if any_user:
+                # Users exist - use normal authentication
+                self.logger.info("Users exist in database - using normal authentication")
+                self.login_dialog = ModernLoginDialog()
+                if self.login_dialog.exec_() == QDialog.Accepted and self.login_dialog.user:
+                    user = self.login_dialog.user
+                    opening_amount = None
+                    
+                    # Handle cashier-specific flow
+                    if hasattr(user, 'role') and getattr(user.role, 'value', None) == 'cashier':
+                        opening_amount = self.handle_cashier_flow(user)
+                        if opening_amount is None:
+                            return None
+                    
+                    return user, opening_amount
+                return None
+            else:
+                # No users exist - create temporary admin user for initial setup
+                self.logger.info("No users exist - creating temporary admin user for initial setup")
+                
+                # Create a temporary admin user for initial setup
+                from models.user import UserRole
+                import bcrypt
+                
+                # Create temporary admin user
+                password_hash = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                temp_user = User(
+                    username='admin',
+                    password_hash=password_hash,
+                    role=UserRole.ADMIN,
+                    full_name='System Administrator',
+                    active=1
+                )
+                
+                # Set the current user in auth controller
+                auth_controller = AuthController()
+                auth_controller.current_user = temp_user
+                
+                self.logger.info("Created temporary admin user for initial setup")
+                
+                # Return the temporary user with no opening amount (admin doesn't need shift)
+                return temp_user, None
             
         except Exception as e:
             self.logger.error(f"Authentication error: {str(e)}")
