@@ -854,6 +854,26 @@ class ModernAdminPanelWidget(QWidget):
         
         layout.addLayout(info_layout)
         
+        # Time Zone Settings Button
+        timezone_btn = QPushButton("🕐 Time Zone Settings")
+        timezone_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                padding: 12px 20px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+                margin-top: 10px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        timezone_btn.clicked.connect(self.show_timezone_settings)
+        layout.addWidget(timezone_btn)
+        
         return section
     
     def create_reports_section(self) -> QWidget:
@@ -927,6 +947,17 @@ class ModernAdminPanelWidget(QWidget):
             
         except Exception as e:
             self.logger.error(f"Error showing shift reports: {e}")
+    
+    def show_timezone_settings(self):
+        """Show time zone settings dialog."""
+        try:
+            from ui.components.timezone_settings_dialog import TimeZoneSettingsDialog
+            
+            dialog = TimeZoneSettingsDialog(self)
+            dialog.exec_()
+            
+        except Exception as e:
+            self.logger.error(f"Error showing timezone settings: {e}")
     
     def get_button_style(self, color: str) -> str:
         """Get button styling."""

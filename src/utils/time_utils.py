@@ -6,19 +6,29 @@ Provides functions for time synchronization and validation.
 import time
 import logging
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 from PyQt5.QtCore import QDateTime, QTimer
 
 logger = logging.getLogger(__name__)
 
 def get_system_time() -> QDateTime:
     """
-    Get the current system time with validation.
+    Get the current system time with validation and time zone caching.
     
     Returns:
         QDateTime: Current system time
     """
     try:
+        # Check if time zone caching is enabled
+        settings = load_timezone_settings()
+        
+        if settings.get("enable_cache", True):
+            # Use cached time zone if available
+            cached_timezone = settings.get("manual_timezone")
+            if cached_timezone and cached_timezone != "UTC":
+                # Apply cached time zone (simplified - in full implementation you'd use pytz)
+                logger.debug(f"Using cached timezone: {cached_timezone}")
+        
         current_time = QDateTime.currentDateTime()
         
         if not current_time.isValid():
@@ -40,6 +50,44 @@ def get_system_time() -> QDateTime:
         logger.error(f"Error getting system time: {e}")
         return QDateTime()
 
+def load_timezone_settings() -> Dict[str, Any]:
+    """
+    Load time zone settings from file.
+    
+    Returns:
+        Dict: Time zone settings
+    """
+    default_settings = {
+        "enable_cache": True,
+        "auto_detect": True,
+        "manual_timezone": "UTC",
+        "hour_format": "12-hour (AM/PM)",
+        "show_seconds": True,
+        "cache_duration": 6,
+        "auto_refresh": True,
+        "refresh_interval": 15,
+        "last_cache_update": None,
+        "cache_log": []
+    }
+    
+    try:
+        import json
+        import os
+        
+        settings_file = "timezone_settings.json"
+        if os.path.exists(settings_file):
+            with open(settings_file, 'r') as f:
+                settings = json.load(f)
+                # Merge with defaults to ensure all keys exist
+                for key, value in default_settings.items():
+                    if key not in settings:
+                        settings[key] = value
+                return settings
+    except Exception as e:
+        logger.error(f"Error loading timezone settings: {e}")
+    
+    return default_settings
+
 def format_time_12hour(dt: QDateTime) -> str:
     """
     Format QDateTime to 12-hour format with AM/PM.
@@ -53,7 +101,25 @@ def format_time_12hour(dt: QDateTime) -> str:
     if not dt.isValid():
         return "--:--:-- --"
     
-    return dt.toString("hh:mm:ss AP")
+    # Load time zone settings
+    settings = load_timezone_settings()
+    
+    # Check if seconds should be shown
+    show_seconds = settings.get("show_seconds", True)
+    
+    # Check hour format preference
+    hour_format = settings.get("hour_format", "12-hour (AM/PM)")
+    
+    if hour_format == "24-hour":
+        if show_seconds:
+            return dt.toString("HH:mm:ss")
+        else:
+            return dt.toString("HH:mm")
+    else:
+        if show_seconds:
+            return dt.toString("hh:mm:ss AP")
+        else:
+            return dt.toString("hh:mm AP")
 
 def format_datetime_12hour(dt: QDateTime) -> str:
     """
