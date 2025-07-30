@@ -9,8 +9,9 @@ from ui.components.add_product_page import AddProductPage
 from ui.components.admin_auth_dialog import AdminAuthDialog
 from ui.components.show_products_window import ShowProductsWindow
 from ui.components.daily_sales_report_dialog import DailySalesReportDialog
+from ui.components.simple_sale_report_dialog import SimpleSaleReportDialog
 
 __all__ = [
     'ProductCard', 'CartWidget', 'EnhancedCartWidget', 
-    'AddProductPage', 'ShowProductsWindow', 'DailySalesReportDialog'
+    'AddProductPage', 'ShowProductsWindow', 'DailySalesReportDialog', 'SimpleSaleReportDialog'
 ]

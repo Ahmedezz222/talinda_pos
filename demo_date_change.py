@@ -14,7 +14,7 @@ sys.path.insert(0, str(src_dir))
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QLabel
 from PyQt5.QtCore import QDate
-from ui.components.daily_sales_report_dialog import DailySalesReportDialog
+from ui.components.simple_sale_report_dialog import SimpleSaleReportDialog
 from controllers.shift_controller import ShiftController
 import logging
 
@@ -115,7 +115,7 @@ class DateChangeDemo(QMainWindow):
             report_data = self.shift_controller.get_daily_sales_report(target_date)
             
             # Create and show the dialog
-            dialog = DailySalesReportDialog(report_data=report_data)
+            dialog = SimpleSaleReportDialog(report_data=report_data)
             
             # Set the dialog's date to match the target date
             dialog.date_edit.setDate(QDate(target_date.year, target_date.month, target_date.day))

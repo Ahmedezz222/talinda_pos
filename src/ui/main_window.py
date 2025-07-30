@@ -877,15 +877,15 @@ class ModernAdminPanelWidget(QWidget):
         return section
     
     def show_daily_sales_report(self):
-        """Show the daily sales report dialog."""
+        """Show the simple daily sales report dialog."""
         try:
             from controllers.shift_controller import ShiftController
-            from ui.components.daily_sales_report_dialog import DailySalesReportDialog
+            from ui.components.simple_sale_report_dialog import SimpleSaleReportDialog
             
             shift_controller = ShiftController()
             report_data = shift_controller.get_daily_sales_report()
             
-            dialog = DailySalesReportDialog(self, report_data)
+            dialog = SimpleSaleReportDialog(self, report_data)
             dialog.exec_()
             
         except Exception as e:
@@ -895,13 +895,13 @@ class ModernAdminPanelWidget(QWidget):
         """Show shift reports dialog."""
         try:
             from controllers.shift_controller import ShiftController
-            from ui.components.daily_sales_report_dialog import DailySalesReportDialog
+            from ui.components.simple_sale_report_dialog import SimpleSaleReportDialog
             
             shift_controller = ShiftController()
             # For now, show the same dialog but could be enhanced for shift-specific reports
             report_data = shift_controller.get_daily_sales_report()
             
-            dialog = DailySalesReportDialog(self, report_data)
+            dialog = SimpleSaleReportDialog(self, report_data)
             dialog.exec_()
             
         except Exception as e:
