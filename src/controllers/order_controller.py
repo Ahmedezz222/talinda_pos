@@ -307,7 +307,7 @@ class OrderController:
         """
         try:
             order.customer_name = customer_name
-            order.updated_at = datetime.utcnow()
+            order.updated_at = get_current_local_time()
             if safe_commit(self.session):
                 logger.info(f"Order {order.order_number} customer name updated")
                 return True
@@ -332,7 +332,7 @@ class OrderController:
         """
         try:
             order.notes = notes
-            order.updated_at = datetime.utcnow()
+            order.updated_at = get_current_local_time()
             if safe_commit(self.session):
                 logger.info(f"Order {order.order_number} notes updated")
                 return True

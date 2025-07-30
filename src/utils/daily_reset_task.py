@@ -3,6 +3,7 @@ Background task for daily sales reset at midnight.
 """
 from PyQt5.QtCore import QThread, pyqtSignal
 from datetime import datetime, time, timedelta
+from utils.localization import get_current_local_time
 import logging
 import time as time_module
 
@@ -27,7 +28,7 @@ class DailyResetTask(QThread):
         while self.running:
             try:
                 # Calculate time until next midnight
-                now = datetime.now()
+                now = get_current_local_time()
                 tomorrow = now.date() + timedelta(days=1)
                 midnight = datetime.combine(tomorrow, time.min)
                 seconds_until_midnight = (midnight - now).total_seconds()
@@ -43,7 +44,7 @@ class DailyResetTask(QThread):
                         time_module.sleep(1)
                 
                 # Check if it's midnight
-                now = datetime.now()
+                now = get_current_local_time()
                 if now.hour == 0 and now.minute == 0:
                     # Check cooldown to prevent multiple triggers
                     if (self.last_reset_time is None or 

@@ -10,6 +10,7 @@ from PyQt5.QtCore import QTimer, QObject, pyqtSignal
 from database.db_config import get_fresh_session
 from models.order import Order, OrderStatus
 from controllers.order_controller import OrderController
+from utils.localization import get_current_local_time
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ class BackgroundTaskManager(QObject):
             session = get_fresh_session()
             
             # Calculate the cutoff time (24 hours ago)
-            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+            cutoff_time = get_current_local_time() - timedelta(hours=24)
             
             # Find active orders older than 24 hours
             old_orders = session.query(Order).filter(
@@ -101,7 +102,7 @@ class BackgroundTaskManager(QObject):
                 logger.info(f"Auto-closed {closed_count} orders older than 24 hours")
                 
                 # Check cooldown before emitting signal
-                now = datetime.now()
+                now = get_current_local_time()
                 if (self.last_orders_closed_time is None or 
                     (now - self.last_orders_closed_time).total_seconds() > self.message_cooldown):
                     self.last_orders_closed_time = now
@@ -129,7 +130,7 @@ class BackgroundTaskManager(QObject):
                 logger.info(f"Cleaned up {cleaned_count} old completed/cancelled orders")
                 
                 # Check cooldown before emitting signal
-                now = datetime.now()
+                now = get_current_local_time()
                 if (self.last_orders_cleaned_time is None or 
                     (now - self.last_orders_cleaned_time).total_seconds() > self.message_cooldown):
                     self.last_orders_cleaned_time = now
@@ -144,7 +145,7 @@ class BackgroundTaskManager(QObject):
         logger.error(error_msg)
         
         # Check cooldown before emitting error signal
-        current_time = datetime.now()
+        current_time = get_current_local_time()
         if (self.last_error_time is None or 
             (current_time - self.last_error_time).total_seconds() > self.message_cooldown):
             self.last_error_time = current_time

@@ -64,7 +64,7 @@ class AuthController:
             open_shift = self.session.query(Shift).filter_by(user_id=user.id, status=ShiftStatus.OPEN).first()
             if open_shift:
                 open_shift.status = ShiftStatus.CLOSED
-                open_shift.close_time = datetime.datetime.utcnow()
+                open_shift.close_time = datetime.datetime.now()
                 open_shift.closing_amount = opening_amount  # Fallback: close with new opening amount
                 safe_commit(self.session)
             
