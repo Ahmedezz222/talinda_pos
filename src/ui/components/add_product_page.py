@@ -5,9 +5,48 @@ import os
 current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, current_dir)
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QFileDialog, QMessageBox, QInputDialog, QTabWidget, QListWidget, QGridLayout
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QFileDialog, QMessageBox, QInputDialog, QTabWidget, QListWidget, QGridLayout, QCheckBox, QTextEdit, QGroupBox, QProgressBar
+from PyQt5.QtCore import pyqtSignal, QThread, pyqtSignal as Signal
 from controllers.product_controller import ProductController
+from utils.excel_report_generator import ExcelReportGenerator
+
+class ImportExportWorker(QThread):
+    """Worker thread for import/export operations."""
+    progress = Signal(str)
+    finished = Signal(dict)
+    error = Signal(str)
+    
+    def __init__(self, operation_type, filepath, update_existing=False):
+        super().__init__()
+        self.operation_type = operation_type
+        self.filepath = filepath
+        self.update_existing = update_existing
+        self.product_controller = ProductController()
+    
+    def run(self):
+        try:
+            if self.operation_type == 'export_products':
+                self.progress.emit("Exporting products...")
+                result = self.product_controller.export_products_to_excel(self.filepath)
+                self.finished.emit({'type': 'export_products', 'filepath': result})
+                
+            elif self.operation_type == 'export_categories':
+                self.progress.emit("Exporting categories...")
+                result = self.product_controller.export_categories_to_excel(self.filepath)
+                self.finished.emit({'type': 'export_categories', 'filepath': result})
+                
+            elif self.operation_type == 'import_products':
+                self.progress.emit("Importing products...")
+                result = self.product_controller.import_products_from_excel(self.filepath, self.update_existing)
+                self.finished.emit({'type': 'import_products', 'results': result})
+                
+            elif self.operation_type == 'import_categories':
+                self.progress.emit("Importing categories...")
+                result = self.product_controller.import_categories_from_excel(self.filepath, self.update_existing)
+                self.finished.emit({'type': 'import_categories', 'results': result})
+                
+        except Exception as e:
+            self.error.emit(str(e))
 
 class AddProductPage(QWidget):
     product_added = pyqtSignal(dict)  # Emitted when a product is added
@@ -18,6 +57,7 @@ class AddProductPage(QWidget):
         super().__init__(parent)
         self.product_controller = ProductController()
         self.categories = categories or self._fetch_categories()
+        self.import_export_worker = None
         self.init_ui()
 
     def _fetch_categories(self):
@@ -63,6 +103,7 @@ class AddProductPage(QWidget):
         """)
         self.tabs.addTab(self._product_tab_ui(), 'Add Product')
         self.tabs.addTab(self._category_tab_ui(), 'Manage Categories')
+        self.tabs.addTab(self._import_export_tab_ui(), 'Import/Export')
         main_layout.addWidget(self.tabs)
 
     def _product_tab_ui(self):
@@ -275,6 +316,221 @@ class AddProductPage(QWidget):
 
         return widget
 
+    def _import_export_tab_ui(self):
+        """Create the import/export tab UI."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Title
+        title_label = QLabel('Import/Export Data')
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 10px;")
+        layout.addWidget(title_label)
+
+        # Export Section
+        export_group = QGroupBox('Export Data')
+        export_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        export_layout = QVBoxLayout(export_group)
+        export_layout.setSpacing(15)
+
+        # Export buttons
+        export_buttons_layout = QHBoxLayout()
+        
+        export_products_btn = QPushButton('Export Products')
+        export_products_btn.setMinimumHeight(45)
+        export_products_btn.setStyleSheet("""
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+        """)
+        export_products_btn.clicked.connect(self.export_products)
+        
+        export_categories_btn = QPushButton('Export Categories')
+        export_categories_btn.setMinimumHeight(45)
+        export_categories_btn.setStyleSheet("""
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+        """)
+        export_categories_btn.clicked.connect(self.export_categories)
+        
+        export_buttons_layout.addWidget(export_products_btn)
+        export_buttons_layout.addWidget(export_categories_btn)
+        export_buttons_layout.addStretch()
+        
+        export_layout.addLayout(export_buttons_layout)
+        layout.addWidget(export_group)
+
+        # Import Section
+        import_group = QGroupBox('Import Data')
+        import_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        import_layout = QVBoxLayout(import_group)
+        import_layout.setSpacing(15)
+
+        # Import options
+        self.update_existing_checkbox = QCheckBox('Update existing items')
+        self.update_existing_checkbox.setStyleSheet("font-size: 14px; color: #2c3e50;")
+        import_layout.addWidget(self.update_existing_checkbox)
+
+        # Template download section
+        template_layout = QHBoxLayout()
+        template_label = QLabel('Download Templates:')
+        template_label.setStyleSheet("font-size: 14px; color: #2c3e50; font-weight: bold;")
+        
+        download_products_template_btn = QPushButton('Product Template')
+        download_products_template_btn.setMinimumHeight(35)
+        download_products_template_btn.setStyleSheet("""
+            background-color: #9b59b6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+        """)
+        download_products_template_btn.clicked.connect(self.download_product_template)
+        
+        download_categories_template_btn = QPushButton('Category Template')
+        download_categories_template_btn.setMinimumHeight(35)
+        download_categories_template_btn.setStyleSheet("""
+            background-color: #9b59b6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+        """)
+        download_categories_template_btn.clicked.connect(self.download_category_template)
+        
+        template_layout.addWidget(template_label)
+        template_layout.addWidget(download_products_template_btn)
+        template_layout.addWidget(download_categories_template_btn)
+        template_layout.addStretch()
+        
+        import_layout.addLayout(template_layout)
+
+        # Import buttons
+        import_buttons_layout = QHBoxLayout()
+        
+        import_products_btn = QPushButton('Import Products')
+        import_products_btn.setMinimumHeight(45)
+        import_products_btn.setStyleSheet("""
+            background-color: #f39c12;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+        """)
+        import_products_btn.clicked.connect(self.import_products)
+        
+        import_categories_btn = QPushButton('Import Categories')
+        import_categories_btn.setMinimumHeight(45)
+        import_categories_btn.setStyleSheet("""
+            background-color: #e67e22;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+        """)
+        import_categories_btn.clicked.connect(self.import_categories)
+        
+        import_buttons_layout.addWidget(import_products_btn)
+        import_buttons_layout.addWidget(import_categories_btn)
+        import_buttons_layout.addStretch()
+        
+        import_layout.addLayout(import_buttons_layout)
+        layout.addWidget(import_group)
+
+        # Progress and Status Section
+        status_group = QGroupBox('Status')
+        status_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        status_layout = QVBoxLayout(status_group)
+        status_layout.setSpacing(10)
+
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                text-align: center;
+                font-weight: bold;
+            }
+            QProgressBar::chunk {
+                background-color: #3498db;
+                border-radius: 3px;
+            }
+        """)
+        status_layout.addWidget(self.progress_bar)
+
+        # Status text
+        self.status_text = QTextEdit()
+        self.status_text.setMaximumHeight(150)
+        self.status_text.setStyleSheet("""
+            QTextEdit {
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                background-color: #f8f9fa;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+            }
+        """)
+        self.status_text.setPlaceholderText("Import/export status will appear here...")
+        status_layout.addWidget(self.status_text)
+
+        layout.addWidget(status_group)
+        layout.addStretch()
+
+        return widget
+
     def _refresh_category_combo(self):
         self.cat_combo.clear()
         for cat in self.categories:
@@ -429,3 +685,270 @@ class AddProductPage(QWidget):
         self.barcode_input.clear()
         self.image_input.clear()
         self.cancelled.emit() 
+
+    def download_product_template(self):
+        """Download product import template."""
+        try:
+            filepath, _ = QFileDialog.getSaveFileName(
+                self,
+                'Save Product Template',
+                'product_import_template.xlsx',
+                'Excel Files (*.xlsx);;All Files (*)'
+            )
+            
+            if filepath:
+                excel_generator = ExcelReportGenerator()
+                result = excel_generator.create_product_import_template(filepath)
+                
+                if result:
+                    self.status_text.append(f"✅ Product template downloaded to: {result}")
+                    QMessageBox.information(
+                        self,
+                        'Template Downloaded',
+                        f'Product import template has been saved to:\n{result}\n\n'
+                        'You can now fill in your product data and import it back.'
+                    )
+                else:
+                    QMessageBox.warning(self, 'Error', 'Failed to create product template.')
+                    
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', f'Error downloading template: {str(e)}')
+
+    def download_category_template(self):
+        """Download category import template."""
+        try:
+            filepath, _ = QFileDialog.getSaveFileName(
+                self,
+                'Save Category Template',
+                'category_import_template.xlsx',
+                'Excel Files (*.xlsx);;All Files (*)'
+            )
+            
+            if filepath:
+                excel_generator = ExcelReportGenerator()
+                result = excel_generator.create_category_import_template(filepath)
+                
+                if result:
+                    self.status_text.append(f"✅ Category template downloaded to: {result}")
+                    QMessageBox.information(
+                        self,
+                        'Template Downloaded',
+                        f'Category import template has been saved to:\n{result}\n\n'
+                        'You can now fill in your category data and import it back.'
+                    )
+                else:
+                    QMessageBox.warning(self, 'Error', 'Failed to create category template.')
+                    
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', f'Error downloading template: {str(e)}')
+
+    def export_products(self):
+        """Export products to Excel file."""
+        try:
+            filepath, _ = QFileDialog.getSaveFileName(
+                self,
+                'Export Products',
+                'products_export.xlsx',
+                'Excel Files (*.xlsx);;All Files (*)'
+            )
+            
+            if filepath:
+                self.progress_bar.setVisible(True)
+                self.progress_bar.setRange(0, 0)  # Indeterminate progress
+                self.status_text.append("Starting product export...")
+                
+                self.import_export_worker = ImportExportWorker('export_products', filepath)
+                self.import_export_worker.progress.connect(self.update_status)
+                self.import_export_worker.finished.connect(self.on_export_finished)
+                self.import_export_worker.error.connect(self.on_import_export_error)
+                self.import_export_worker.start()
+                
+        except Exception as e:
+            QMessageBox.warning(self, 'Export Error', f'Error starting export: {str(e)}')
+
+    def export_categories(self):
+        """Export categories to Excel file."""
+        try:
+            filepath, _ = QFileDialog.getSaveFileName(
+                self,
+                'Export Categories',
+                'categories_export.xlsx',
+                'Excel Files (*.xlsx);;All Files (*)'
+            )
+            
+            if filepath:
+                self.progress_bar.setVisible(True)
+                self.progress_bar.setRange(0, 0)  # Indeterminate progress
+                self.status_text.append("Starting category export...")
+                
+                self.import_export_worker = ImportExportWorker('export_categories', filepath)
+                self.import_export_worker.progress.connect(self.update_status)
+                self.import_export_worker.finished.connect(self.on_export_finished)
+                self.import_export_worker.error.connect(self.on_import_export_error)
+                self.import_export_worker.start()
+                
+        except Exception as e:
+            QMessageBox.warning(self, 'Export Error', f'Error starting export: {str(e)}')
+
+    def import_products(self):
+        """Import products from Excel file."""
+        try:
+            filepath, _ = QFileDialog.getOpenFileName(
+                self,
+                'Import Products',
+                '',
+                'Excel Files (*.xlsx);;All Files (*)'
+            )
+            
+            if filepath:
+                update_existing = self.update_existing_checkbox.isChecked()
+                
+                # Confirm import
+                msg = f"Import products from '{filepath}'?"
+                if update_existing:
+                    msg += "\n\nWARNING: This will update existing products with the same name or barcode!"
+                
+                reply = QMessageBox.question(
+                    self,
+                    'Confirm Import',
+                    msg,
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                
+                if reply == QMessageBox.Yes:
+                    self.progress_bar.setVisible(True)
+                    self.progress_bar.setRange(0, 0)  # Indeterminate progress
+                    self.status_text.append("Starting product import...")
+                    
+                    self.import_export_worker = ImportExportWorker('import_products', filepath, update_existing)
+                    self.import_export_worker.progress.connect(self.update_status)
+                    self.import_export_worker.finished.connect(self.on_import_finished)
+                    self.import_export_worker.error.connect(self.on_import_export_error)
+                    self.import_export_worker.start()
+                
+        except Exception as e:
+            QMessageBox.warning(self, 'Import Error', f'Error starting import: {str(e)}')
+
+    def import_categories(self):
+        """Import categories from Excel file."""
+        try:
+            filepath, _ = QFileDialog.getOpenFileName(
+                self,
+                'Import Categories',
+                '',
+                'Excel Files (*.xlsx);;All Files (*)'
+            )
+            
+            if filepath:
+                update_existing = self.update_existing_checkbox.isChecked()
+                
+                # Confirm import
+                msg = f"Import categories from '{filepath}'?"
+                if update_existing:
+                    msg += "\n\nWARNING: This will update existing categories with the same name!"
+                
+                reply = QMessageBox.question(
+                    self,
+                    'Confirm Import',
+                    msg,
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                
+                if reply == QMessageBox.Yes:
+                    self.progress_bar.setVisible(True)
+                    self.progress_bar.setRange(0, 0)  # Indeterminate progress
+                    self.status_text.append("Starting category import...")
+                    
+                    self.import_export_worker = ImportExportWorker('import_categories', filepath, update_existing)
+                    self.import_export_worker.progress.connect(self.update_status)
+                    self.import_export_worker.finished.connect(self.on_import_finished)
+                    self.import_export_worker.error.connect(self.on_import_export_error)
+                    self.import_export_worker.start()
+                
+        except Exception as e:
+            QMessageBox.warning(self, 'Import Error', f'Error starting import: {str(e)}')
+
+    def update_status(self, message):
+        """Update status text with progress message."""
+        self.status_text.append(message)
+
+    def on_export_finished(self, result):
+        """Handle export completion."""
+        self.progress_bar.setVisible(False)
+        
+        if result['type'] == 'export_products':
+            self.status_text.append(f"✅ Products exported successfully to: {result['filepath']}")
+            QMessageBox.information(self, 'Export Complete', f'Products exported successfully to:\n{result["filepath"]}')
+        elif result['type'] == 'export_categories':
+            self.status_text.append(f"✅ Categories exported successfully to: {result['filepath']}")
+            QMessageBox.information(self, 'Export Complete', f'Categories exported successfully to:\n{result["filepath"]}')
+
+    def on_import_finished(self, result):
+        """Handle import completion."""
+        self.progress_bar.setVisible(False)
+        
+        if result['type'] == 'import_products':
+            results = result['results']
+            self.status_text.append(f"✅ Product import completed:")
+            self.status_text.append(f"   - Total rows: {results['total_rows']}")
+            self.status_text.append(f"   - Imported: {results['imported']}")
+            self.status_text.append(f"   - Updated: {results['updated']}")
+            self.status_text.append(f"   - Skipped: {results['skipped']}")
+            
+            if results['errors']:
+                self.status_text.append(f"   - Errors: {len(results['errors'])}")
+                for error in results['errors'][:5]:  # Show first 5 errors
+                    self.status_text.append(f"     • {error}")
+                if len(results['errors']) > 5:
+                    self.status_text.append(f"     • ... and {len(results['errors']) - 5} more errors")
+            
+            # Refresh categories after import
+            self.categories = self._fetch_categories()
+            self._refresh_category_combo()
+            self._refresh_category_list()
+            
+            QMessageBox.information(
+                self,
+                'Import Complete',
+                f'Product import completed!\n\n'
+                f'Imported: {results["imported"]}\n'
+                f'Updated: {results["updated"]}\n'
+                f'Skipped: {results["skipped"]}\n'
+                f'Errors: {len(results["errors"])}'
+            )
+            
+        elif result['type'] == 'import_categories':
+            results = result['results']
+            self.status_text.append(f"✅ Category import completed:")
+            self.status_text.append(f"   - Total rows: {results['total_rows']}")
+            self.status_text.append(f"   - Imported: {results['imported']}")
+            self.status_text.append(f"   - Updated: {results['updated']}")
+            self.status_text.append(f"   - Skipped: {results['skipped']}")
+            
+            if results['errors']:
+                self.status_text.append(f"   - Errors: {len(results['errors'])}")
+                for error in results['errors'][:5]:  # Show first 5 errors
+                    self.status_text.append(f"     • {error}")
+                if len(results['errors']) > 5:
+                    self.status_text.append(f"     • ... and {len(results['errors']) - 5} more errors")
+            
+            # Refresh categories after import
+            self.categories = self._fetch_categories()
+            self._refresh_category_combo()
+            self._refresh_category_list()
+            
+            QMessageBox.information(
+                self,
+                'Import Complete',
+                f'Category import completed!\n\n'
+                f'Imported: {results["imported"]}\n'
+                f'Updated: {results["updated"]}\n'
+                f'Skipped: {results["skipped"]}\n'
+                f'Errors: {len(results["errors"])}'
+            )
+
+    def on_import_export_error(self, error_message):
+        """Handle import/export errors."""
+        self.progress_bar.setVisible(False)
+        self.status_text.append(f"❌ Error: {error_message}")
+        QMessageBox.warning(self, 'Error', f'Operation failed:\n{error_message}') 

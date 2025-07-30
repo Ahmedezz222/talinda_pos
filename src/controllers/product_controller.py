@@ -6,6 +6,9 @@ from sqlalchemy.orm.exc import NoResultFound
 from database.db_config import Session, safe_commit, get_fresh_session
 from models.product import Product, Category, CategoryType
 import logging
+import pandas as pd
+from pathlib import Path
+from datetime import datetime
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -516,6 +519,284 @@ class ProductController:
                 'sales_count': 0,
                 'sales_details': []
             }
+
+    def export_products_to_excel(self, filepath: str = None) -> str:
+        """
+        Export all products to an Excel file.
+        
+        Args:
+            filepath: Optional filepath to save the Excel file
+            
+        Returns:
+            str: Path to the exported Excel file
+        """
+        try:
+            # Get all products with their categories
+            products = self.session.query(Product).all()
+            
+            # Prepare data for export
+            export_data = []
+            for product in products:
+                category_name = product.category.name if product.category else "No Category"
+                export_data.append({
+                    'Name': product.name,
+                    'Description': product.description or '',
+                    'Price': product.price,
+                    'Category': category_name,
+                    'Barcode': product.barcode or '',
+                    'Image Path': product.image_path or ''
+                })
+            
+            # Create DataFrame
+            df = pd.DataFrame(export_data)
+            
+            # Generate filename if not provided
+            if not filepath:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filepath = f"products_export_{timestamp}.xlsx"
+            
+            # Ensure the directory exists
+            Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+            
+            # Export to Excel
+            df.to_excel(filepath, index=False, sheet_name='Products')
+            
+            logger.info(f"Products exported successfully to: {filepath}")
+            return filepath
+            
+        except Exception as e:
+            logger.error(f"Error exporting products: {e}")
+            raise e
+    
+    def export_categories_to_excel(self, filepath: str = None) -> str:
+        """
+        Export all categories to an Excel file.
+        
+        Args:
+            filepath: Optional filepath to save the Excel file
+            
+        Returns:
+            str: Path to the exported Excel file
+        """
+        try:
+            # Get all categories
+            categories = self.session.query(Category).all()
+            
+            # Prepare data for export
+            export_data = []
+            for category in categories:
+                # Count products in this category
+                product_count = self.session.query(Product).filter_by(category_id=category.id).count()
+                export_data.append({
+                    'Name': category.name,
+                    'Description': category.description or '',
+                    'Tax Rate (%)': category.tax_rate,
+                    'Product Count': product_count
+                })
+            
+            # Create DataFrame
+            df = pd.DataFrame(export_data)
+            
+            # Generate filename if not provided
+            if not filepath:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filepath = f"categories_export_{timestamp}.xlsx"
+            
+            # Ensure the directory exists
+            Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+            
+            # Export to Excel
+            df.to_excel(filepath, index=False, sheet_name='Categories')
+            
+            logger.info(f"Categories exported successfully to: {filepath}")
+            return filepath
+            
+        except Exception as e:
+            logger.error(f"Error exporting categories: {e}")
+            raise e
+    
+    def import_products_from_excel(self, filepath: str, update_existing: bool = False) -> dict:
+        """
+        Import products from an Excel file.
+        
+        Args:
+            filepath: Path to the Excel file
+            update_existing: Whether to update existing products with same barcode
+            
+        Returns:
+            dict: Import results with success/error counts
+        """
+        try:
+            # Read Excel file
+            df = pd.read_excel(filepath, sheet_name='Products')
+            
+            results = {
+                'total_rows': len(df),
+                'imported': 0,
+                'updated': 0,
+                'skipped': 0,
+                'errors': []
+            }
+            
+            # Get all categories for lookup
+            categories = {cat.name: cat.id for cat in self.session.query(Category).all()}
+            
+            for index, row in df.iterrows():
+                try:
+                    # Extract data from row
+                    name = str(row.get('Name', '')).strip()
+                    description = str(row.get('Description', '')).strip()
+                    price = row.get('Price', 0)
+                    category_name = str(row.get('Category', '')).strip()
+                    barcode = str(row.get('Barcode', '')).strip()
+                    image_path = str(row.get('Image Path', '')).strip()
+                    
+                    # Validate required fields
+                    if not name or not price or price <= 0:
+                        results['errors'].append(f"Row {index + 2}: Invalid name or price")
+                        results['skipped'] += 1
+                        continue
+                    
+                    # Handle empty values
+                    if description == 'nan':
+                        description = ''
+                    if barcode == 'nan':
+                        barcode = None
+                    if image_path == 'nan':
+                        image_path = None
+                    
+                    # Get category ID
+                    category_id = None
+                    if category_name and category_name != 'nan':
+                        category_id = categories.get(category_name)
+                        if not category_id:
+                            # Create category if it doesn't exist
+                            try:
+                                new_category = self.add_category(category_name)
+                                category_id = new_category.id
+                                categories[category_name] = category_id
+                            except Exception as e:
+                                results['errors'].append(f"Row {index + 2}: Could not create category '{category_name}': {e}")
+                                results['skipped'] += 1
+                                continue
+                    
+                    # Check if product exists (by barcode or name)
+                    existing_product = None
+                    if barcode:
+                        existing_product = self.session.query(Product).filter_by(barcode=barcode).first()
+                    if not existing_product:
+                        existing_product = self.session.query(Product).filter_by(name=name).first()
+                    
+                    if existing_product and update_existing:
+                        # Update existing product
+                        self.update_product(
+                            existing_product.id,
+                            name=name,
+                            description=description,
+                            price=float(price),
+                            category_id=category_id,
+                            barcode=barcode,
+                            image_path=image_path
+                        )
+                        results['updated'] += 1
+                    elif existing_product and not update_existing:
+                        # Skip existing product
+                        results['skipped'] += 1
+                        results['errors'].append(f"Row {index + 2}: Product '{name}' already exists")
+                    else:
+                        # Add new product
+                        self.add_product(
+                            name=name,
+                            description=description,
+                            price=float(price),
+                            category_id=category_id,
+                            barcode=barcode,
+                            image_path=image_path
+                        )
+                        results['imported'] += 1
+                        
+                except Exception as e:
+                    results['errors'].append(f"Row {index + 2}: {str(e)}")
+                    results['skipped'] += 1
+            
+            logger.info(f"Product import completed: {results['imported']} imported, {results['updated']} updated, {results['skipped']} skipped")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error importing products: {e}")
+            raise e
+    
+    def import_categories_from_excel(self, filepath: str, update_existing: bool = False) -> dict:
+        """
+        Import categories from an Excel file.
+        
+        Args:
+            filepath: Path to the Excel file
+            update_existing: Whether to update existing categories with same name
+            
+        Returns:
+            dict: Import results with success/error counts
+        """
+        try:
+            # Read Excel file
+            df = pd.read_excel(filepath, sheet_name='Categories')
+            
+            results = {
+                'total_rows': len(df),
+                'imported': 0,
+                'updated': 0,
+                'skipped': 0,
+                'errors': []
+            }
+            
+            for index, row in df.iterrows():
+                try:
+                    # Extract data from row
+                    name = str(row.get('Name', '')).strip()
+                    description = str(row.get('Description', '')).strip()
+                    tax_rate = row.get('Tax Rate (%)', 14.0)
+                    
+                    # Validate required fields
+                    if not name:
+                        results['errors'].append(f"Row {index + 2}: Invalid name")
+                        results['skipped'] += 1
+                        continue
+                    
+                    # Handle empty values
+                    if description == 'nan':
+                        description = ''
+                    
+                    # Check if category exists
+                    existing_category = self.session.query(Category).filter_by(name=name).first()
+                    
+                    if existing_category and update_existing:
+                        # Update existing category
+                        self.update_category(
+                            existing_category.id,
+                            name=name,
+                            description=description,
+                            tax_rate=float(tax_rate)
+                        )
+                        results['updated'] += 1
+                    elif existing_category and not update_existing:
+                        # Skip existing category
+                        results['skipped'] += 1
+                        results['errors'].append(f"Row {index + 2}: Category '{name}' already exists")
+                    else:
+                        # Add new category
+                        self.add_category(name, float(tax_rate))
+                        results['imported'] += 1
+                        
+                except Exception as e:
+                    results['errors'].append(f"Row {index + 2}: {str(e)}")
+                    results['skipped'] += 1
+            
+            logger.info(f"Category import completed: {results['imported']} imported, {results['updated']} updated, {results['skipped']} skipped")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error importing categories: {e}")
+            raise e
 
     def __del__(self):
         """Clean up the session."""

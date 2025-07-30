@@ -1,128 +1,152 @@
-# Import/Export Guide for Product Management
+# Import/Export Guide for Talinda POS System
 
-This guide explains how to use the new import/export functionality in the Product Management section of the POS system.
+This guide explains how to use the import and export functionality for products and categories in the Talinda POS system.
 
 ## Overview
 
-The Product Management page now includes a new "Import/Export" tab that allows you to:
-- Export existing products and categories to Excel/CSV files
-- Import new products and categories from Excel/CSV files
-- Download templates to help prepare your data
+The Import/Export feature allows you to:
+- Export existing products and categories to Excel files
+- Import products and categories from Excel files
+- Download template files to understand the required format
+- Update existing items during import
 
-## Accessing the Import/Export Feature
+## Accessing Import/Export
 
-1. Open the POS system
-2. Navigate to Product Management
-3. Click on the "Import/Export" tab
+1. Open the Talinda POS system
+2. Navigate to **Product Management**
+3. Click on the **Import/Export** tab
 
 ## Exporting Data
 
 ### Export Products
-- Click "Export Products to Excel"
-- Choose a location to save the file
-- The file will contain all current products with their details
+1. Click the **Export Products** button
+2. Choose a location and filename for the Excel file
+3. The system will export all products with the following columns:
+   - Name
+   - Description
+   - Price
+   - Category
+   - Barcode
+   - Image Path
 
 ### Export Categories
-- Click "Export Categories to Excel"
-- Choose a location to save the file
-- The file will contain all current categories
+1. Click the **Export Categories** button
+2. Choose a location and filename for the Excel file
+3. The system will export all categories with the following columns:
+   - Name
+   - Description
+   - Tax Rate (%)
+   - Product Count
 
 ## Importing Data
 
-### Import Products
-1. Click "Import Products from Excel"
-2. Select your Excel/CSV file
-3. The system will validate the file format
-4. Products will be imported automatically
-5. A summary will show how many products were imported successfully
+### Before Importing
+1. **Download Templates**: Use the template download buttons to get sample files
+2. **Prepare Your Data**: Fill in the template with your product/category data
+3. **Check Format**: Ensure your Excel file follows the template structure
 
-**Required columns for products:**
-- Name (required)
-- Price (required)
-- Category (required)
-- Description (optional)
-- Barcode (optional)
-- Image_Path (optional)
+### Import Options
+- **Update Existing Items**: Check this box if you want to update existing products/categories with the same name or barcode
+- **Skip Existing Items**: Leave unchecked to skip items that already exist
+
+### Import Products
+1. Click the **Import Products** button
+2. Select your Excel file
+3. Choose whether to update existing items
+4. Confirm the import operation
+5. Review the results in the status section
 
 ### Import Categories
-1. Click "Import Categories from Excel"
-2. Select your Excel/CSV file
-3. The system will validate the file format
-4. Categories will be imported automatically
-5. A summary will show how many categories were imported successfully
+1. Click the **Import Categories** button
+2. Select your Excel file
+3. Choose whether to update existing items
+4. Confirm the import operation
+5. Review the results in the status section
 
-**Required columns for categories:**
-- Name (required)
+## Excel File Format
 
-## Downloading Templates
+### Products Sheet
+| Column | Required | Description | Example |
+|--------|----------|-------------|---------|
+| Name | Yes | Product name | "Coffee" |
+| Description | No | Product description | "Hot coffee drink" |
+| Price | Yes | Product price (must be > 0) | 5.99 |
+| Category | No | Category name | "Beverage" |
+| Barcode | No | Product barcode | "1234567890" |
+| Image Path | No | Path to product image | "images/coffee.jpg" |
 
-### Product Template
-- Click "Download Product Template"
-- This creates an Excel file with the correct column headers
-- Fill in your product data
-- Use this file for importing products
+### Categories Sheet
+| Column | Required | Description | Example |
+|--------|----------|-------------|---------|
+| Name | Yes | Category name | "Food" |
+| Description | No | Category description | "Food items and meals" |
+| Tax Rate (%) | No | Tax rate percentage | 14.0 |
 
-### Category Template
-- Click "Download Category Template"
-- This creates an Excel file with the correct column headers
-- Fill in your category names
-- Use this file for importing categories
+## Import Rules
 
-## File Formats Supported
+### Products
+- **Name and Price** are required fields
+- **Category** will be created automatically if it doesn't exist
+- **Barcode** must be unique (if provided)
+- **Price** must be greater than 0
+- Existing products are identified by name or barcode
 
-- Excel files (.xlsx, .xls)
-- CSV files (.csv)
-
-## Tips for Successful Import
-
-1. **Use the templates**: Download and use the provided templates to ensure correct formatting
-2. **Check your data**: Make sure all required fields are filled
-3. **Category names**: Category names are case-insensitive and will be matched to existing categories
-4. **New categories**: If a category doesn't exist, it will be created automatically
-5. **Barcodes**: Barcodes must be unique. Leave empty if not needed
-6. **Prices**: Must be valid numbers (e.g., 99.99)
+### Categories
+- **Name** is the only required field
+- **Tax Rate** defaults to 14.0% if not specified
+- Existing categories are identified by name
 
 ## Error Handling
 
-The system will show you:
-- How many items were imported successfully
-- How many items failed to import
-- Specific error messages for failed imports
-- The first 10 error details to help you fix issues
+The import process provides detailed feedback:
+- **Total Rows**: Number of rows processed
+- **Imported**: Successfully imported items
+- **Updated**: Existing items that were updated
+- **Skipped**: Items that were skipped (duplicates, invalid data)
+- **Errors**: List of specific errors encountered
 
-## Example Product Data
+### Common Errors
+- **Invalid name or price**: Missing or invalid required fields
+- **Product already exists**: Duplicate product found
+- **Category already exists**: Duplicate category found
+- **Invalid barcode**: Barcode format issues
 
-| Name | Description | Price | Category | Barcode | Image_Path |
-|------|-------------|-------|----------|---------|------------|
-| Laptop | High-performance laptop | 999.99 | Electronics | 1234567890 | images/laptop.jpg |
-| T-Shirt | Cotton t-shirt | 29.99 | Clothing | 0987654321 | images/tshirt.jpg |
+## Best Practices
 
-## Example Category Data
-
-| Name |
-|------|
-| Electronics |
-| Clothing |
-| Food & Beverages |
+1. **Backup First**: Always backup your data before importing
+2. **Test with Small Files**: Test the import process with a few items first
+3. **Use Templates**: Download and use the provided templates
+4. **Validate Data**: Check your Excel file for errors before importing
+5. **Review Results**: Always review the import results and error messages
 
 ## Troubleshooting
 
-**Common Issues:**
-1. **Missing required columns**: Make sure your file has all required columns
-2. **Invalid price format**: Ensure prices are numbers (e.g., 99.99, not $99.99)
-3. **Duplicate barcodes**: Each product must have a unique barcode
-4. **File format**: Make sure you're using .xlsx, .xls, or .csv format
+### Import Fails
+- Check that your Excel file has the correct column headers
+- Ensure required fields are filled
+- Verify that prices are numeric and greater than 0
+- Check for duplicate barcodes
 
-**Getting Help:**
-- Check the error messages in the import results
-- Verify your data format matches the templates
-- Ensure all required fields are filled
+### Export Fails
+- Ensure you have write permissions to the selected location
+- Check that the file is not open in another application
+- Verify that you have sufficient disk space
 
-## Benefits
+### Template Download Fails
+- Ensure Excel functionality is available (openpyxl installed)
+- Check that you have write permissions to the selected location
 
-This import/export functionality makes it easy to:
-- Bulk add products and categories
-- Backup your current data
-- Transfer data between different POS installations
-- Prepare data in Excel and import it all at once
-- Save time when setting up a new system 
+## Technical Notes
+
+- The system uses pandas and openpyxl for Excel operations
+- Import/export operations run in background threads to prevent UI freezing
+- Progress is shown in real-time during operations
+- All operations are logged for debugging purposes
+
+## Support
+
+If you encounter issues with import/export functionality:
+1. Check the status messages in the Import/Export tab
+2. Review the error messages for specific issues
+3. Ensure your Excel file follows the template format
+4. Contact system administrator for technical support 

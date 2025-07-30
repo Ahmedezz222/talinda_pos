@@ -616,6 +616,155 @@ class ExcelReportGenerator:
         else:
             return "Excel functionality is not available. Install openpyxl: pip install openpyxl"
     
+    def create_product_import_template(self, filepath: str = None) -> str:
+        """
+        Create a sample Excel template for product import.
+        
+        Args:
+            filepath: Optional filepath to save the template
+            
+        Returns:
+            str: Path to the created template file
+        """
+        if not self.is_excel_available():
+            logger.error("Excel functionality not available. Install openpyxl: pip install openpyxl")
+            return None
+        
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment
+            
+            # Create workbook and worksheet
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Products"
+            
+            # Define headers
+            headers = ['Name', 'Description', 'Price', 'Category', 'Barcode', 'Image Path']
+            
+            # Add headers with styling
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color="1976D2", end_color="1976D2", fill_type="solid")
+                cell.alignment = Alignment(horizontal='center')
+            
+            # Add sample data
+            sample_data = [
+                ['Sample Product 1', 'This is a sample product description', 9.99, 'Food', '1234567890', ''],
+                ['Sample Product 2', 'Another sample product', 15.50, 'Beverage', '0987654321', ''],
+                ['Sample Product 3', 'Third sample product', 25.00, 'Dessert', '', '']
+            ]
+            
+            for row, data in enumerate(sample_data, 2):
+                for col, value in enumerate(data, 1):
+                    ws.cell(row=row, column=col, value=value)
+            
+            # Auto-adjust column widths
+            for column in ws.columns:
+                max_length = 0
+                column_letter = _get_column_letter(column[0].column)
+                
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                
+                adjusted_width = min(max_length + 2, 50)
+                ws.column_dimensions[column_letter].width = adjusted_width
+            
+            # Generate filename if not provided
+            if not filepath:
+                filepath = "product_import_template.xlsx"
+            
+            # Save the file
+            wb.save(filepath)
+            wb.close()
+            
+            logger.info(f"Product import template created: {filepath}")
+            return filepath
+            
+        except Exception as e:
+            logger.error(f"Error creating product import template: {e}")
+            return None
+    
+    def create_category_import_template(self, filepath: str = None) -> str:
+        """
+        Create a sample Excel template for category import.
+        
+        Args:
+            filepath: Optional filepath to save the template
+            
+        Returns:
+            str: Path to the created template file
+        """
+        if not self.is_excel_available():
+            logger.error("Excel functionality not available. Install openpyxl: pip install openpyxl")
+            return None
+        
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment
+            
+            # Create workbook and worksheet
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Categories"
+            
+            # Define headers
+            headers = ['Name', 'Description', 'Tax Rate (%)']
+            
+            # Add headers with styling
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color="1976D2", end_color="1976D2", fill_type="solid")
+                cell.alignment = Alignment(horizontal='center')
+            
+            # Add sample data
+            sample_data = [
+                ['Food', 'Food items and meals', 14.0],
+                ['Beverage', 'Drinks and beverages', 14.0],
+                ['Dessert', 'Desserts and sweets', 14.0],
+                ['Other', 'Other miscellaneous items', 14.0]
+            ]
+            
+            for row, data in enumerate(sample_data, 2):
+                for col, value in enumerate(data, 1):
+                    ws.cell(row=row, column=col, value=value)
+            
+            # Auto-adjust column widths
+            for column in ws.columns:
+                max_length = 0
+                column_letter = _get_column_letter(column[0].column)
+                
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                
+                adjusted_width = min(max_length + 2, 50)
+                ws.column_dimensions[column_letter].width = adjusted_width
+            
+            # Generate filename if not provided
+            if not filepath:
+                filepath = "category_import_template.xlsx"
+            
+            # Save the file
+            wb.save(filepath)
+            wb.close()
+            
+            logger.info(f"Category import template created: {filepath}")
+            return filepath
+            
+        except Exception as e:
+            logger.error(f"Error creating category import template: {e}")
+            return None
+
     def get_report_preview(self, shift: Shift) -> Dict:
         """
         Get a preview of the report data without generating the file.
