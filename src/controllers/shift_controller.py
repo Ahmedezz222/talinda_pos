@@ -9,6 +9,7 @@ from models.user import User, Shift, ShiftStatus
 from models.sale import Sale, sale_products
 from models.order import Order, OrderStatus
 from models.product import Product, Category
+from utils.localization import get_current_local_time
 import logging
 
 # Set up logging
@@ -63,7 +64,7 @@ class ShiftController:
                 user_id=user.id,
                 opening_amount=opening_amount,
                 status=ShiftStatus.OPEN,
-                open_time=datetime.utcnow()
+                open_time=get_current_local_time()
             )
             
             self.session.add(shift)
@@ -106,7 +107,7 @@ class ShiftController:
                 
                 # Update shift with closing information
                 shift.status = ShiftStatus.CLOSED
-                shift.close_time = datetime.utcnow()
+                shift.close_time = get_current_local_time()
                 
                 if safe_commit(check_session):
                     logger.info(f"Shift closed for user {user.username}")

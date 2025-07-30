@@ -6,6 +6,7 @@ from database.db_config import Base
 import enum
 import datetime
 from sqlalchemy.orm import relationship
+from utils.localization import get_current_local_time
 
 class UserRole(enum.Enum):
     """Enum for user roles in the system."""
@@ -36,7 +37,7 @@ class Shift(Base):
     __tablename__ = 'shifts'
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    open_time = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    open_time = Column(DateTime, default=get_current_local_time, nullable=False)
     close_time = Column(DateTime, nullable=True)
     opening_amount = Column(Float, nullable=False)
     status = Column(Enum(ShiftStatus), default=ShiftStatus.OPEN, nullable=False)

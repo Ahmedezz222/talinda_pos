@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 from database.db_config import Base
 from models.product import Product
 from models.user import User
+from utils.localization import get_current_local_time
 
 # Many-to-many relationship table for sales and products
 sale_products = Table(
@@ -23,7 +24,7 @@ class Sale(Base):
     __tablename__ = 'sales'
     
     id = Column(Integer, primary_key=True)
-    timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
+    timestamp = Column(DateTime, nullable=False, default=get_current_local_time)
     total_amount = Column(Float, nullable=False)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     

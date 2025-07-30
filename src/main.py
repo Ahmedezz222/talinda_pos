@@ -857,7 +857,7 @@ Total Amount: ${shift_summary.get('total_amount', 0):.2f}
                         if current_shift:
                             # Close existing shift without authentication (since user chose to replace)
                             current_shift.status = ShiftStatus.CLOSED
-                            current_shift.close_time = datetime.datetime.utcnow()
+                            current_shift.close_time = datetime.datetime.now()
                             # Use the new opening amount as closing amount for simplicity
                             current_shift.closing_amount = amount
                             safe_commit(shift_controller.session)

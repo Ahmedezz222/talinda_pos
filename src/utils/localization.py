@@ -715,3 +715,23 @@ def format_datetime_12hour(dt):
     
     # Format as date with 12-hour time
     return dt.strftime("%Y-%m-%d %I:%M:%S %p") 
+
+def get_current_local_time():
+    """
+    Get current local time consistently throughout the application.
+    
+    Returns:
+        datetime: Current local time as datetime object
+    """
+    from datetime import datetime
+    return datetime.now()
+
+def get_current_local_datetime():
+    """
+    Get current local datetime consistently throughout the application.
+    This is an alias for get_current_local_time() for clarity.
+    
+    Returns:
+        datetime: Current local datetime as datetime object
+    """
+    return get_current_local_time() 

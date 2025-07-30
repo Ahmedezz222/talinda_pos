@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 from database.db_config import Base, get_fresh_session, safe_commit
 from models.product import Product
 from models.user import User
+from utils.localization import get_current_local_time
 import enum
 import logging
 
@@ -39,8 +40,8 @@ class Order(Base):
     order_number = Column(String(20), unique=True, nullable=False)
     customer_name = Column(String(100), nullable=True)  # Name tag for the order
     status = Column(Enum(OrderStatus), default=OrderStatus.ACTIVE, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=get_current_local_time)
+    updated_at = Column(DateTime, nullable=False, default=get_current_local_time, onupdate=get_current_local_time)
     completed_at = Column(DateTime, nullable=True)
     cancelled_at = Column(DateTime, nullable=True)
     cancelled_by = Column(Integer, ForeignKey('users.id'), nullable=True)
@@ -110,8 +111,8 @@ class Order(Base):
         """Mark order as completed."""
         try:
             self.status = OrderStatus.COMPLETED
-            self.completed_at = datetime.utcnow()
-            self.updated_at = datetime.utcnow()
+            self.completed_at = get_current_local_time()
+            self.updated_at = get_current_local_time()
             logger.info(f"Order {self.order_number} marked as completed")
         except Exception as e:
             logger.error(f"Error completing order: {e}")
@@ -120,10 +121,10 @@ class Order(Base):
         """Cancel the order."""
         try:
             self.status = OrderStatus.CANCELLED
-            self.cancelled_at = datetime.utcnow()
+            self.cancelled_at = get_current_local_time()
             self.cancelled_by = user_id
             self.cancelled_reason = reason
-            self.updated_at = datetime.utcnow()
+            self.updated_at = get_current_local_time()
             logger.info(f"Order {self.order_number} cancelled by user {user_id}")
         except Exception as e:
             logger.error(f"Error cancelling order: {e}")
