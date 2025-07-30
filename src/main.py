@@ -725,12 +725,16 @@ class ApplicationManager:
             self.splash_screen.update_progress(30, "Initializing database...")
             init_database()
             
+            # Ensure admin user exists
+            self.splash_screen.update_progress(40, "Setting up admin user...")
+            self.ensure_admin_user()
+            
             # Load stylesheet
-            self.splash_screen.update_progress(60, "Loading styles...")
+            self.splash_screen.update_progress(50, "Loading styles...")
             self.load_stylesheet()
             
             # Initialize background task manager
-            self.splash_screen.update_progress(80, "Initializing background tasks...")
+            self.splash_screen.update_progress(70, "Initializing background tasks...")
             self.background_task_manager = BackgroundTaskManager(check_interval_minutes=60)
             
             # Initialize daily reset task
@@ -750,6 +754,50 @@ class ApplicationManager:
                                  f"Failed to initialize application:\n{str(e)}")
             return False
     
+    def ensure_admin_user(self):
+        """Ensure admin user exists with admin/admin123 credentials."""
+        try:
+            import bcrypt
+            from models.user import User, UserRole
+            
+            session = Session()
+            
+            # Check if admin user exists
+            admin_user = session.query(User).filter_by(username='admin').first()
+            
+            if admin_user:
+                self.logger.info("Admin user already exists")
+                
+                # Check if password is correct (admin123)
+                if bcrypt.checkpw('admin123'.encode('utf-8'), admin_user.password_hash.encode('utf-8')):
+                    self.logger.info("Admin password is already correct")
+                else:
+                    # Update password to admin123
+                    password_hash = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                    admin_user.password_hash = password_hash
+                    safe_commit(session)
+                    self.logger.info("Updated admin password to admin123")
+            else:
+                # Create admin user
+                password_hash = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                
+                admin_user = User(
+                    username='admin',
+                    password_hash=password_hash,
+                    role=UserRole.ADMIN,
+                    full_name='System Administrator',
+                    active=1
+                )
+                
+                session.add(admin_user)
+                safe_commit(session)
+                self.logger.info("Created admin user with admin/admin123 credentials")
+            
+            session.close()
+            
+        except Exception as e:
+            self.logger.error(f"Error ensuring admin user: {e}")
+    
     def load_stylesheet(self):
         """Load and apply the application stylesheet."""
         try:
@@ -767,9 +815,15 @@ class ApplicationManager:
     def run_authentication(self) -> Optional[Tuple]:
         """Run the authentication process."""
         try:
-            self.login_dialog = ModernLoginDialog()
-            if self.login_dialog.exec_() == QDialog.Accepted and self.login_dialog.user:
-                user = self.login_dialog.user
+            # Auto-login with admin credentials
+            self.logger.info("Auto-login with admin credentials")
+            
+            # Create auth controller and login with admin/admin123
+            auth_controller = AuthController()
+            if auth_controller.login("admin", "admin123"):
+                user = auth_controller.get_current_user()
+                self.logger.info(f"Auto-login successful for user: {user.username}")
+                
                 opening_amount = None
                 
                 # Handle cashier-specific flow
@@ -779,7 +833,22 @@ class ApplicationManager:
                         return None
                 
                 return user, opening_amount
-            return None
+            else:
+                self.logger.error("Auto-login failed with admin credentials")
+                # Fallback to normal login dialog if auto-login fails
+                self.login_dialog = ModernLoginDialog()
+                if self.login_dialog.exec_() == QDialog.Accepted and self.login_dialog.user:
+                    user = self.login_dialog.user
+                    opening_amount = None
+                    
+                    # Handle cashier-specific flow
+                    if hasattr(user, 'role') and getattr(user.role, 'value', None) == 'cashier':
+                        opening_amount = self.handle_cashier_flow(user)
+                        if opening_amount is None:
+                            return None
+                    
+                    return user, opening_amount
+                return None
             
         except Exception as e:
             self.logger.error(f"Authentication error: {str(e)}")
