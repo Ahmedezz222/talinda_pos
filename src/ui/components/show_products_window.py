@@ -524,7 +524,7 @@ class ShowProductsWindow(QDialog):
                         error_msg += f"• Total sales containing this product: {sales_info['sales_count']}\n"
                         error_msg += f"• First few sales:\n"
                         for i, sale in enumerate(sales_info['sales_details'][:3]):  # Show first 3 sales
-                            error_msg += f"  - Sale #{sale['sale_id']} (${sale['total_amount']:.2f}) - {sale['timestamp'].strftime('%Y-%m-%d %H:%M')}\n"
+                            error_msg += f"  - Sale #{sale['sale_id']} (${sale['total_amount']:.2f}) - {sale['timestamp'].strftime('%Y-%m-%d %I:%M %p')}\n"
                         if sales_info['sales_count'] > 3:
                             error_msg += f"  ... and {sales_info['sales_count'] - 3} more sales\n"
                 except Exception as sales_error:
@@ -563,7 +563,7 @@ class ShowProductsWindow(QDialog):
             
             for i, sale in enumerate(sales_info['sales_details'][:10]):  # Show first 10 sales
                 msg += f"{i+1}. Sale #{sale['sale_id']}\n"
-                msg += f"   Date: {sale['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+                msg += f"   Date: {sale['timestamp'].strftime('%Y-%m-%d %I:%M:%S %p')}\n"
                 msg += f"   Quantity: {sale['quantity']}\n"
                 msg += f"   Price at sale: ${sale['price_at_sale']:.2f}\n"
                 msg += f"   Total sale amount: ${sale['total_amount']:.2f}\n\n"

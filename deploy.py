@@ -227,7 +227,7 @@ For technical support, contact the development team.
 This software is provided under the MIT License.
 
 ---
-Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+Generated on: {datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")}
 """
         
         readme_file = output_dir / "README.txt"

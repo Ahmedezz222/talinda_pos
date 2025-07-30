@@ -4,7 +4,7 @@ Simple Sale Report Dialog - Simplified version for basic sales reporting.
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QTableWidget, QTableWidgetItem, QGroupBox, QGridLayout,
-    QDateEdit, QHeaderView
+    QDateEdit, QHeaderView, QTabWidget, QWidget
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor
@@ -71,13 +71,46 @@ class SimpleSaleReportDialog(QDialog):
         
         layout.addLayout(header_layout)
         
-        # Summary section
-        summary_group = self.create_summary_section()
-        layout.addWidget(summary_group)
+        # Create tab widget for different sections
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                background-color: white;
+            }
+            QTabBar::tab {
+                background-color: #ecf0f1;
+                color: #2c3e50;
+                padding: 12px 20px;
+                margin-right: 2px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QTabBar::tab:selected {
+                background-color: #3498db;
+                color: white;
+            }
+            QTabBar::tab:hover {
+                background-color: #bdc3c7;
+            }
+        """)
         
-        # Sales table
-        sales_group = self.create_sales_table_section()
-        layout.addWidget(sales_group)
+        # Summary tab
+        self.summary_tab = self.create_summary_tab()
+        self.tab_widget.addTab(self.summary_tab, "📊 Summary")
+        
+        # Cashier Shifts tab
+        self.shifts_tab = self.create_shifts_tab()
+        self.tab_widget.addTab(self.shifts_tab, "👥 Cashier Shifts")
+        
+        # Sales Details tab
+        self.sales_tab = self.create_sales_tab()
+        self.tab_widget.addTab(self.sales_tab, "🛒 Sales Details")
+        
+        layout.addWidget(self.tab_widget)
         
         # Close button
         button_layout = QHBoxLayout()
@@ -106,13 +139,30 @@ class SimpleSaleReportDialog(QDialog):
         # Load initial data
         self.generate_report_for_date(self.date_edit.date().toPyDate())
 
-    def create_summary_section(self) -> QGroupBox:
-        """Create the summary section with key metrics."""
-        group = QGroupBox("Daily Summary")
+    def create_summary_tab(self) -> QWidget:
+        """Create the summary tab with key metrics."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Title
+        title = QLabel("Daily Sales Summary")
+        title.setStyleSheet("""
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        """)
+        layout.addWidget(title)
+        
+        # Summary group
+        group = QGroupBox("Key Metrics")
         group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
-                font-size: 16px;
+                font-size: 18px;
                 border: 2px solid #3498db;
                 border-radius: 8px;
                 margin-top: 10px;
@@ -125,8 +175,8 @@ class SimpleSaleReportDialog(QDialog):
             }
         """)
         
-        layout = QGridLayout(group)
-        layout.setSpacing(15)
+        group_layout = QGridLayout(group)
+        group_layout.setSpacing(20)
         
         # Create metric labels with styling
         self.total_sales_label = self.create_metric_label("0")
@@ -134,16 +184,19 @@ class SimpleSaleReportDialog(QDialog):
         self.average_sale_label = self.create_metric_label("$0.00")
         
         # Add metrics to layout
-        layout.addWidget(QLabel("Total Sales:"), 0, 0)
-        layout.addWidget(self.total_sales_label, 0, 1)
+        group_layout.addWidget(QLabel("Total Sales:"), 0, 0)
+        group_layout.addWidget(self.total_sales_label, 0, 1)
         
-        layout.addWidget(QLabel("Total Amount:"), 1, 0)
-        layout.addWidget(self.total_amount_label, 1, 1)
+        group_layout.addWidget(QLabel("Total Amount:"), 1, 0)
+        group_layout.addWidget(self.total_amount_label, 1, 1)
         
-        layout.addWidget(QLabel("Average Sale:"), 2, 0)
-        layout.addWidget(self.average_sale_label, 2, 1)
+        group_layout.addWidget(QLabel("Average Sale:"), 2, 0)
+        group_layout.addWidget(self.average_sale_label, 2, 1)
         
-        return group
+        layout.addWidget(group)
+        layout.addStretch()
+        
+        return widget
 
     def create_metric_label(self, text: str) -> QLabel:
         """Create a styled metric label."""
@@ -159,26 +212,33 @@ class SimpleSaleReportDialog(QDialog):
         """)
         return label
 
-    def create_sales_table_section(self) -> QGroupBox:
-        """Create the sales table section."""
-        group = QGroupBox("Sales Details")
-        group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 16px;
-                border: 2px solid #3498db;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
+    def create_sales_tab(self) -> QWidget:
+        """Create the sales details tab."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
         
-        layout = QVBoxLayout(group)
+        # Title
+        title = QLabel("Sales Transaction Details")
+        title.setStyleSheet("""
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        """)
+        layout.addWidget(title)
+        
+        # Description
+        description = QLabel("View all sales transactions for the selected date with product details.")
+        description.setStyleSheet("""
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 20px;
+            text-align: center;
+        """)
+        layout.addWidget(description)
         
         # Create sales table
         self.sales_table = QTableWidget()
@@ -217,7 +277,74 @@ class SimpleSaleReportDialog(QDialog):
         
         layout.addWidget(self.sales_table)
         
-        return group
+        return widget
+
+    def create_shifts_tab(self) -> QWidget:
+        """Create the cashier shifts tab."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Title
+        title = QLabel("Cashier Shift Details")
+        title.setStyleSheet("""
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        """)
+        layout.addWidget(title)
+        
+        # Description
+        description = QLabel("View all cashier shifts for the selected date with detailed information.")
+        description.setStyleSheet("""
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 20px;
+            text-align: center;
+        """)
+        layout.addWidget(description)
+        
+        # Create shifts table
+        self.shifts_table = QTableWidget()
+        self.shifts_table.setColumnCount(7)
+        self.shifts_table.setHorizontalHeaderLabels([
+            "Cashier", "Opening Amount", "Open Time", "Close Time", "Duration", "Status", "Total Sales"
+        ])
+        
+        # Set table properties
+        header = self.shifts_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        
+        # Style the table
+        self.shifts_table.setAlternatingRowColors(True)
+        self.shifts_table.setStyleSheet("""
+            QTableWidget {
+                gridline-color: #bdc3c7;
+                background-color: white;
+                alternate-background-color: #f8f9fa;
+                border: 1px solid #bdc3c7;
+                border-radius: 5px;
+            }
+            QHeaderView::section {
+                background-color: #e67e22;
+                color: white;
+                padding: 10px;
+                border: none;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QTableWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #ecf0f1;
+            }
+        """)
+        
+        layout.addWidget(self.shifts_table)
+        
+        return widget
 
     def load_report_data(self):
         """Load and display the report data."""
@@ -230,6 +357,9 @@ class SimpleSaleReportDialog(QDialog):
             self.total_sales_label.setText(str(total_sales))
             self.total_amount_label.setText(f"${total_amount:.2f}")
             self.average_sale_label.setText(f"${average_sale:.2f}")
+            
+            # Update shifts table
+            self.update_shifts_table()
             
             # Update sales table
             self.update_sales_table()
@@ -285,6 +415,63 @@ class SimpleSaleReportDialog(QDialog):
                     item = self.sales_table.item(row, col)
                     if item:
                         item.setBackground(QColor(240, 248, 255))  # Light blue for sales
+
+    def update_shifts_table(self):
+        """Update the shifts table with data."""
+        shifts = self.report_data.get('shifts', [])
+        
+        # Clear existing data
+        self.shifts_table.setRowCount(0)
+        
+        for shift in shifts:
+            row = self.shifts_table.rowCount()
+            self.shifts_table.insertRow(row)
+            
+            # Cashier
+            cashier_item = QTableWidgetItem(shift.get('user', 'Unknown'))
+            self.shifts_table.setItem(row, 0, cashier_item)
+            
+            # Opening amount
+            opening_item = QTableWidgetItem(f"${shift.get('opening_amount', 0):.2f}")
+            self.shifts_table.setItem(row, 1, opening_item)
+            
+            # Open time
+            open_time = shift.get('open_time')
+            open_time_str = open_time.strftime("%I:%M:%S %p") if open_time else "N/A"
+            open_item = QTableWidgetItem(open_time_str)
+            self.shifts_table.setItem(row, 2, open_item)
+            
+            # Close time
+            close_time = shift.get('close_time')
+            close_time_str = close_time.strftime("%I:%M:%S %p") if close_time else "N/A"
+            close_item = QTableWidgetItem(close_time_str)
+            self.shifts_table.setItem(row, 3, close_item)
+            
+            # Duration
+            duration_item = QTableWidgetItem(shift.get('duration', 'N/A'))
+            self.shifts_table.setItem(row, 4, duration_item)
+            
+            # Status
+            status_item = QTableWidgetItem(shift.get('status', 'Unknown'))
+            self.shifts_table.setItem(row, 5, status_item)
+            
+            # Total Sales (from shift data)
+            total_sales = shift.get('total_sales', 0)
+            total_sales_item = QTableWidgetItem(f"${total_sales:.2f}")
+            self.shifts_table.setItem(row, 6, total_sales_item)
+            
+            # Color code rows based on status
+            status = shift.get('status', '')
+            if status == 'closed':
+                for col in range(7):
+                    item = self.shifts_table.item(row, col)
+                    if item:
+                        item.setBackground(QColor(240, 255, 240))  # Light green for closed shifts
+            elif status == 'open':
+                for col in range(7):
+                    item = self.shifts_table.item(row, col)
+                    if item:
+                        item.setBackground(QColor(255, 248, 220))  # Light yellow for open shifts
 
     def on_date_changed(self, qdate):
         """Handle date change."""

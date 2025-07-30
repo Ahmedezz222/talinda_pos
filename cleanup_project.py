@@ -446,7 +446,7 @@ class ProjectCleaner:
         with open(report_file, 'w', encoding='utf-8') as f:
             f.write("TALINDA POS CLEANUP REPORT\n")
             f.write("="*40 + "\n\n")
-            f.write(f"Cleanup performed on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Cleanup performed on: {datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')}\n")
             f.write(f"Total files removed: {len(self.removed_files)}\n")
             f.write(f"Total directories removed: {len(self.removed_dirs)}\n")
             f.write(f"Total size removed: {self.total_size_removed:,} bytes ({self.total_size_removed / 1024 / 1024:.2f} MB)\n\n")

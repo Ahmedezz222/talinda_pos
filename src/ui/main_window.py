@@ -176,9 +176,8 @@ class ModernPOSWidget(QWidget):
         
         # Update time every second
         self.timer = QTimer()
-        self.timer.timeout.connect(self.update_time)
-        self.timer.start(1000)
-        self.update_time()
+        from utils.time_utils import sync_time_display
+        sync_time_display(self.timer, self.update_time)
         
         return header
     
@@ -554,8 +553,30 @@ class ModernPOSWidget(QWidget):
     
     def update_time(self):
         """Update the time display."""
-        current_time = QDateTime.currentDateTime().toString("hh:mm:ss")
-        self.time_label.setText(f"🕐 {current_time}")
+        try:
+            from utils.time_utils import get_system_time, format_time_12hour
+            
+            # Get current system time with validation
+            current_datetime = get_system_time()
+            
+            # Format and display time
+            current_time = format_time_12hour(current_datetime)
+            self.time_label.setText(f"🕐 {current_time}")
+            
+            # Log time update for debugging (only once per minute to avoid spam)
+            if hasattr(self, '_last_time_log') and self._last_time_log:
+                from utils.time_utils import get_time_difference
+                last_log_time = QDateTime.fromString(self._last_time_log, "hh:mm:ss AP")
+                if get_time_difference(last_log_time, current_datetime) > 60:  # Log every minute
+                    self.logger.debug(f"Time updated: {current_time}")
+                    self._last_time_log = current_time
+            else:
+                self._last_time_log = current_time
+                self.logger.debug(f"Time initialized: {current_time}")
+                
+        except Exception as e:
+            self.logger.error(f"Error updating time display: {e}")
+            self.time_label.setText("🕐 --:--:-- --")
     
     def on_product_added(self, product_id: int):
         """Handle product added to cart."""
@@ -1311,9 +1332,8 @@ class ModernMainWindow(QMainWindow):
         
         # Update time
         self.timer = QTimer()
-        self.timer.timeout.connect(self.update_time)
-        self.timer.start(1000)
-        self.update_time()
+        from utils.time_utils import sync_time_display
+        sync_time_display(self.timer, self.update_time)
     
     def setup_connections(self):
         """Setup signal connections."""
@@ -1719,8 +1739,30 @@ class ModernMainWindow(QMainWindow):
     
     def update_time(self):
         """Update the time display."""
-        current_time = QDateTime.currentDateTime().toString("hh:mm:ss")
-        self.time_label.setText(f"🕐 {current_time}")
+        try:
+            from utils.time_utils import get_system_time, format_time_12hour
+            
+            # Get current system time with validation
+            current_datetime = get_system_time()
+            
+            # Format and display time
+            current_time = format_time_12hour(current_datetime)
+            self.time_label.setText(f"🕐 {current_time}")
+            
+            # Log time update for debugging (only once per minute to avoid spam)
+            if hasattr(self, '_last_time_log') and self._last_time_log:
+                from utils.time_utils import get_time_difference
+                last_log_time = QDateTime.fromString(self._last_time_log, "hh:mm:ss AP")
+                if get_time_difference(last_log_time, current_datetime) > 60:  # Log every minute
+                    self.logger.debug(f"Time updated: {current_time}")
+                    self._last_time_log = current_time
+            else:
+                self._last_time_log = current_time
+                self.logger.debug(f"Time initialized: {current_time}")
+                
+        except Exception as e:
+            self.logger.error(f"Error updating time display: {e}")
+            self.time_label.setText("🕐 --:--:-- --")
     
     def closeEvent(self, event):
         """Handle window close event."""

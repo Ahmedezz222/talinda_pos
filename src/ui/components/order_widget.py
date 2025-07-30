@@ -100,7 +100,7 @@ class OrderCard(QFrame):
         layout.addWidget(total_label)
         
         # Time created
-        time_label = QLabel(f"Created: {self.order.created_at.strftime('%H:%M:%S')}")
+        time_label = QLabel(f"Created: {self.order.created_at.strftime('%I:%M:%S %p')}")
         time_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
         layout.addWidget(time_label)
         

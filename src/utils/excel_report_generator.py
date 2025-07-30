@@ -217,12 +217,12 @@ class ExcelReportGenerator:
         ws['A6'] = f"Shift ID: {shift.id}"
         ws['B6'] = f"Status: {shift.status.value.upper()}"
         
-        ws['A7'] = f"Open Time: {shift.open_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        ws['A7'] = f"Open Time: {shift.open_time.strftime('%Y-%m-%d %I:%M:%S %p')}"
         if shift.close_time:
-            ws['B7'] = f"Close Time: {shift.close_time.strftime('%Y-%m-%d %H:%M:%S')}"
+            ws['B7'] = f"Close Time: {shift.close_time.strftime('%Y-%m-%d %I:%M:%S %p')}"
         
         # Report generation time
-        ws['A9'] = f"Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        ws['A9'] = f"Report Generated: {datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')}"
         ws['A9'].font = _Font(italic=True, size=10, color="7F8C8D")
     
     def _create_shift_summary(self, ws: Union[Worksheet, object], shift: Shift):
@@ -332,7 +332,7 @@ class ExcelReportGenerator:
         for sale in sales_data:
             row += 1
             ws.cell(row=row, column=1, value=sale['id'])
-            ws.cell(row=row, column=2, value=sale['timestamp'].strftime('%H:%M:%S'))
+            ws.cell(row=row, column=2, value=sale['timestamp'].strftime('%I:%M:%S %p'))
             ws.cell(row=row, column=3, value=sale['total_items'])
             ws.cell(row=row, column=4, value=f"${sale['total_amount']:.2f}")
             ws.cell(row=row, column=5, value=sale['cashier_name'])
@@ -636,8 +636,8 @@ class ExcelReportGenerator:
             preview = {
                 'shift_id': shift.id,
                 'cashier_name': shift.user.full_name or shift.user.username,
-                'open_time': shift.open_time.strftime('%Y-%m-%d %H:%M:%S'),
-                'close_time': shift.close_time.strftime('%Y-%m-%d %H:%M:%S') if shift.close_time else 'Not closed',
+                        'open_time': shift.open_time.strftime('%Y-%m-%d %I:%M:%S %p'),
+        'close_time': shift.close_time.strftime('%Y-%m-%d %I:%M:%S %p') if shift.close_time else 'Not closed',
                 'opening_amount': shift.opening_amount,
                 'total_sales': total_sales,
                 'expected_cash': expected_cash,

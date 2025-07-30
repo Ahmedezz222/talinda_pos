@@ -559,7 +559,7 @@ class ShiftController:
                         sale_detail = {
                             'sale_id': f"SALE-{row.sale_id}",
                             'date': row.sale_timestamp.strftime('%Y-%m-%d') if row.sale_timestamp else 'Unknown',
-                            'time': row.sale_timestamp.strftime('%H:%M:%S') if row.sale_timestamp else 'Unknown',
+                            'time': row.sale_timestamp.strftime('%I:%M:%S %p') if row.sale_timestamp else 'Unknown',
                             'cashier': row.cashier_name or 'Unknown',
                             'product_name': row.product_name or 'Unknown',
                             'category': row.category_name or 'Unknown',
@@ -593,7 +593,7 @@ class ShiftController:
                             'customer_name': row.customer_name or 'Walk-in',
                             'order_notes': row.order_notes or '',
                             'date': timestamp.strftime('%Y-%m-%d') if timestamp else 'Unknown',
-                            'time': timestamp.strftime('%H:%M:%S') if timestamp else 'Unknown',
+                            'time': timestamp.strftime('%I:%M:%S %p') if timestamp else 'Unknown',
                             'cashier': row.cashier_name or 'Unknown',
                             'product_name': row.product_name or 'Unknown',
                             'category': row.category_name or 'Unknown',
@@ -626,13 +626,66 @@ class ShiftController:
             try:
                 for shift in daily_shifts:
                     try:
+                        # Calculate total sales for this shift
+                        shift_sales = 0.0
+                        shift_sales_count = 0
+                        
+                        # Get sales during this shift period
+                        if shift.close_time:
+                            # For closed shifts, get sales between open and close time
+                            shift_sales_list = self.session.query(Sale).filter(
+                                and_(
+                                    Sale.timestamp >= shift.open_time,
+                                    Sale.timestamp <= shift.close_time,
+                                    Sale.user_id == shift.user_id
+                                )
+                            ).all()
+                        else:
+                            # For open shifts, get sales from open time onwards
+                            shift_sales_list = self.session.query(Sale).filter(
+                                and_(
+                                    Sale.timestamp >= shift.open_time,
+                                    Sale.user_id == shift.user_id
+                                )
+                            ).all()
+                        
+                        # Calculate total sales amount and count
+                        for sale in shift_sales_list:
+                            shift_sales += sale.total_amount
+                            shift_sales_count += 1
+                        
+                        # Also include completed orders for this shift
+                        if shift.close_time:
+                            shift_orders = self.session.query(Order).filter(
+                                and_(
+                                    Order.created_at >= shift.open_time,
+                                    Order.created_at <= shift.close_time,
+                                    Order.user_id == shift.user_id,
+                                    Order.status == OrderStatus.COMPLETED
+                                )
+                            ).all()
+                        else:
+                            shift_orders = self.session.query(Order).filter(
+                                and_(
+                                    Order.created_at >= shift.open_time,
+                                    Order.user_id == shift.user_id,
+                                    Order.status == OrderStatus.COMPLETED
+                                )
+                            ).all()
+                        
+                        for order in shift_orders:
+                            shift_sales += order.total_amount
+                            shift_sales_count += 1
+                        
                         shift_data = {
                             'user': shift.user.username if shift.user else 'Unknown',
                             'opening_amount': shift.opening_amount,
                             'open_time': shift.open_time,
                             'close_time': getattr(shift, 'close_time', None),
                             'status': shift.status.value,
-                            'duration': None
+                            'duration': None,
+                            'total_sales': shift_sales,
+                            'sales_count': shift_sales_count
                         }
                         
                         if shift.close_time:

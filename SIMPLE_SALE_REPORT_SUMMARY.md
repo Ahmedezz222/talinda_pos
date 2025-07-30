@@ -9,10 +9,10 @@ The sale report has been successfully simplified from a complex multi-tab interf
 - **File**: `src/ui/components/simple_sale_report_dialog.py`
 - **Class**: `SimpleSaleReportDialog`
 - **Features**:
-  - Single view with no tabs
+  - Tabbed interface for better organization
   - Clean, modern UI design
   - Only essential information displayed
-  - Responsive layout
+  - Responsive layout with organized tabs
 
 ### 2. Simplified Interface Elements
 
@@ -23,10 +23,11 @@ The sale report has been successfully simplified from a complex multi-tab interf
 - Overwhelming amount of information
 
 #### After (Simple Report):
-- Single view with 2 main sections
-- 6 columns in sales table (Time, Cashier, Products, Quantity, Total Amount, Notes)
-- 3 key metrics (Total Sales, Total Amount, Average Sale)
-- Clean, focused information
+- Tabbed interface with 3 organized tabs
+- **Summary Tab**: 3 key metrics (Total Sales, Total Amount, Average Sale)
+- **Cashier Shifts Tab**: 7 columns (Cashier, Opening Amount, Open Time, Close Time, Duration, Status, Total Sales)
+- **Sales Details Tab**: 6 columns (Time, Cashier, Products, Quantity, Total Amount, Notes)
+- Clean, focused information with organized tab navigation
 
 ### 3. Updated Main Application
 - **File**: `src/ui/main_window.py`
@@ -49,25 +50,40 @@ The sale report has been successfully simplified from a complex multi-tab interf
 
 ## Key Features of the Simple Sale Report
 
-### 1. Daily Summary Section
+### 1. Summary Tab
 - **Total Sales**: Number of sales transactions
 - **Total Amount**: Total revenue for the day
 - **Average Sale**: Average transaction value
+- Clean, focused view of key metrics
 
-### 2. Sales Details Table
+### 2. Cashier Shifts Tab
+- **Cashier**: Name of the cashier
+- **Opening Amount**: Starting cash amount for the shift
+- **Open Time**: When the shift started
+- **Close Time**: When the shift ended (if closed)
+- **Duration**: How long the shift lasted
+- **Status**: Whether the shift is open or closed
+- **Total Sales**: Total sales amount during the shift
+- Dedicated view for shift management
+
+### 3. Sales Details Tab
 - **Time**: When the sale occurred
 - **Cashier**: Who processed the sale
 - **Products**: What was sold
 - **Quantity**: How many items
 - **Total Amount**: Sale value
 - **Notes**: Any additional information
+- Comprehensive transaction view
 
-### 3. User Interface Features
+### 4. User Interface Features
+- **Tabbed Navigation**: Easy switching between different views
 - **Date Picker**: Easy date selection with calendar popup
 - **Refresh Button**: Manual refresh capability
-- **Color Coding**: Visual distinction between sales and orders
+- **Color Coding**: Visual distinction between sales, orders, and shift status
 - **Responsive Design**: Adapts to different screen sizes
-- **Modern Styling**: Clean, professional appearance
+- **Modern Styling**: Clean, professional appearance with tab styling
+- **Shift Status Indicators**: Color-coded shift status (green for closed, yellow for open)
+- **Organized Layout**: Each tab focuses on specific information type
 
 ## Benefits of the Simplified Report
 

@@ -915,13 +915,13 @@ class DailySalesReportDialog(QDialog):
             
             # Open time
             open_time = shift.get('open_time')
-            open_time_str = open_time.strftime("%H:%M:%S") if open_time else "N/A"
+            open_time_str = open_time.strftime("%I:%M:%S %p") if open_time else "N/A"
             open_item = QTableWidgetItem(open_time_str)
             self.shifts_table.setItem(row, 2, open_item)
             
             # Close time
             close_time = shift.get('close_time')
-            close_time_str = close_time.strftime("%H:%M:%S") if close_time else "N/A"
+            close_time_str = close_time.strftime("%I:%M:%S %p") if close_time else "N/A"
             close_item = QTableWidgetItem(close_time_str)
             self.shifts_table.setItem(row, 3, close_item)
             

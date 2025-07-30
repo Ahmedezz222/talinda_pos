@@ -142,7 +142,7 @@ class OpeningAmountDialog(QDialog):
         if isinstance(open_time, str):
             open_time_str = open_time
         else:
-            open_time_str = open_time.strftime("%Y-%m-%d %H:%M:%S")
+            open_time_str = open_time.strftime("%Y-%m-%d %I:%M:%S %p")
         
         # Create individual labels with gradients
         amount_label = QLabel(f"💰 Opening Amount: ${self.existing_shift.opening_amount:.2f}")

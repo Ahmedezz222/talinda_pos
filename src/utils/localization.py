@@ -666,3 +666,52 @@ def set_language(language: str):
 def is_rtl() -> bool:
     """Convenience function to check if current language is RTL."""
     return localization_manager.is_rtl() 
+
+
+def format_time_12hour(dt):
+    """
+    Format datetime object to 12-hour format with AM/PM.
+    
+    Args:
+        dt: datetime object
+        
+    Returns:
+        str: Time formatted as "hh:mm:ss AM/PM" or "hh:mm AM/PM"
+    """
+    if dt is None:
+        return "N/A"
+    
+    # Format as 12-hour with AM/PM
+    return dt.strftime("%I:%M:%S %p")
+
+def format_time_12hour_short(dt):
+    """
+    Format datetime object to 12-hour format with AM/PM (short version without seconds).
+    
+    Args:
+        dt: datetime object
+        
+    Returns:
+        str: Time formatted as "hh:mm AM/PM"
+    """
+    if dt is None:
+        return "N/A"
+    
+    # Format as 12-hour with AM/PM (no seconds)
+    return dt.strftime("%I:%M %p")
+
+def format_datetime_12hour(dt):
+    """
+    Format datetime object to include date and 12-hour time with AM/PM.
+    
+    Args:
+        dt: datetime object
+        
+    Returns:
+        str: DateTime formatted as "YYYY-MM-DD hh:mm:ss AM/PM"
+    """
+    if dt is None:
+        return "N/A"
+    
+    # Format as date with 12-hour time
+    return dt.strftime("%Y-%m-%d %I:%M:%S %p") 
