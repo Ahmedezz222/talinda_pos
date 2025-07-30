@@ -762,36 +762,45 @@ class ApplicationManager:
             
             session = Session()
             
-            # Check if admin user exists
-            admin_user = session.query(User).filter_by(username='admin').first()
+            # Check if any users exist in the database
+            any_user = session.query(User).first()
             
-            if admin_user:
-                self.logger.info("Admin user already exists")
+            if any_user:
+                self.logger.info("Users exist in database")
                 
-                # Check if password is correct (admin123)
-                if bcrypt.checkpw('admin123'.encode('utf-8'), admin_user.password_hash.encode('utf-8')):
-                    self.logger.info("Admin password is already correct")
+                # Check if admin user exists
+                admin_user = session.query(User).filter_by(username='admin').first()
+                
+                if admin_user:
+                    self.logger.info("Admin user already exists")
+                    
+                    # Check if password is correct (admin123)
+                    if bcrypt.checkpw('admin123'.encode('utf-8'), admin_user.password_hash.encode('utf-8')):
+                        self.logger.info("Admin password is already correct")
+                    else:
+                        # Update password to admin123
+                        password_hash = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                        admin_user.password_hash = password_hash
+                        safe_commit(session)
+                        self.logger.info("Updated admin password to admin123")
                 else:
-                    # Update password to admin123
+                    # Create admin user
                     password_hash = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                    admin_user.password_hash = password_hash
+                    
+                    admin_user = User(
+                        username='admin',
+                        password_hash=password_hash,
+                        role=UserRole.ADMIN,
+                        full_name='System Administrator',
+                        active=1
+                    )
+                    
+                    session.add(admin_user)
                     safe_commit(session)
-                    self.logger.info("Updated admin password to admin123")
+                    self.logger.info("Created admin user with admin/admin123 credentials")
             else:
-                # Create admin user
-                password_hash = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                
-                admin_user = User(
-                    username='admin',
-                    password_hash=password_hash,
-                    role=UserRole.ADMIN,
-                    full_name='System Administrator',
-                    active=1
-                )
-                
-                session.add(admin_user)
-                safe_commit(session)
-                self.logger.info("Created admin user with admin/admin123 credentials")
+                self.logger.info("No users exist in database - skipping admin user creation")
+                self.logger.info("Users can be added through the admin panel after first login")
             
             session.close()
             
@@ -815,40 +824,31 @@ class ApplicationManager:
     def run_authentication(self) -> Optional[Tuple]:
         """Run the authentication process."""
         try:
-            # Auto-login with admin credentials
-            self.logger.info("Auto-login with admin credentials")
+            # Skip authentication and create a temporary admin user
+            self.logger.info("Skipping authentication - creating temporary admin user")
             
-            # Create auth controller and login with admin/admin123
+            # Create a temporary admin user for initial setup
+            from models.user import User, UserRole
+            import bcrypt
+            
+            # Create temporary admin user
+            password_hash = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            temp_user = User(
+                username='admin',
+                password_hash=password_hash,
+                role=UserRole.ADMIN,
+                full_name='System Administrator',
+                active=1
+            )
+            
+            # Set the current user in auth controller
             auth_controller = AuthController()
-            if auth_controller.login("admin", "admin123"):
-                user = auth_controller.get_current_user()
-                self.logger.info(f"Auto-login successful for user: {user.username}")
-                
-                opening_amount = None
-                
-                # Handle cashier-specific flow
-                if hasattr(user, 'role') and getattr(user.role, 'value', None) == 'cashier':
-                    opening_amount = self.handle_cashier_flow(user)
-                    if opening_amount is None:
-                        return None
-                
-                return user, opening_amount
-            else:
-                self.logger.error("Auto-login failed with admin credentials")
-                # Fallback to normal login dialog if auto-login fails
-                self.login_dialog = ModernLoginDialog()
-                if self.login_dialog.exec_() == QDialog.Accepted and self.login_dialog.user:
-                    user = self.login_dialog.user
-                    opening_amount = None
-                    
-                    # Handle cashier-specific flow
-                    if hasattr(user, 'role') and getattr(user.role, 'value', None) == 'cashier':
-                        opening_amount = self.handle_cashier_flow(user)
-                        if opening_amount is None:
-                            return None
-                    
-                    return user, opening_amount
-                return None
+            auth_controller.current_user = temp_user
+            
+            self.logger.info("Created temporary admin user for initial setup")
+            
+            # Return the temporary user with no opening amount (admin doesn't need shift)
+            return temp_user, None
             
         except Exception as e:
             self.logger.error(f"Authentication error: {str(e)}")
