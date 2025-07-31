@@ -52,6 +52,7 @@ class SaleController:
         self.current_user: Optional[User] = None
         self.cart_discount_percentage: float = 0.0  # Cart-wide discount percentage
         self.cart_discount_amount: float = 0.0      # Cart-wide fixed discount
+        self.loaded_order = None  # Store reference to loaded order
     
     def add_to_cart(self, product: Product, quantity: int = 1) -> bool:
         """
@@ -217,6 +218,9 @@ class SaleController:
             # Clear current cart first
             self.clear_cart()
             
+            # Store reference to the loaded order
+            self.loaded_order = order
+            
             # Get order items
             order_items = order.get_order_items()
             
@@ -282,6 +286,7 @@ class SaleController:
         self.cart.clear()
         self.cart_discount_percentage = 0.0
         self.cart_discount_amount = 0.0
+        self.loaded_order = None  # Clear loaded order reference
         logger.debug("Cart cleared")
     
     def process_sale(self, payment_method: str = "cash") -> Optional[Sale]:
@@ -325,6 +330,20 @@ class SaleController:
                         price_at_sale=cart_item.price
                     )
                 )
+            
+            # Handle loaded order completion if this sale is from a loaded order
+            if self.loaded_order:
+                try:
+                    from controllers.order_controller import OrderController
+                    order_controller = OrderController()
+                    
+                    # Complete the loaded order
+                    if order_controller.complete_order(self.loaded_order):
+                        logger.info(f"Completed loaded order {self.loaded_order.order_number} from sale")
+                    else:
+                        logger.warning(f"Failed to complete loaded order {self.loaded_order.order_number}")
+                except Exception as e:
+                    logger.error(f"Error completing loaded order: {e}")
             
             # Create a completed order for the sale
             self._create_completed_order_from_sale(sale)

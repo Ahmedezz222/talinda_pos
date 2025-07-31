@@ -47,6 +47,11 @@ class Config:
     MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', '3'))
     PASSWORD_MIN_LENGTH = int(os.getenv('PASSWORD_MIN_LENGTH', '8'))
     
+    # Shift management settings
+    AUTO_CLOSE_SHIFTS_AT_MIDNIGHT = os.getenv('AUTO_CLOSE_SHIFTS_AT_MIDNIGHT', 'true').lower() == 'true'
+    SHIFT_CLOSE_NOTIFICATION_ENABLED = os.getenv('SHIFT_CLOSE_NOTIFICATION_ENABLED', 'true').lower() == 'true'
+    SHIFT_AUTO_CLOSE_TIME = os.getenv('SHIFT_AUTO_CLOSE_TIME', '00:00')  # HH:MM format
+    
     # File paths
     CSS_FILE = os.getenv('CSS_FILE', 'resources/styles/main.qss')
     LOGO_FILE = os.getenv('LOGO_FILE', 'resources/images/logo.png')

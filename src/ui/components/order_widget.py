@@ -83,10 +83,38 @@ class OrderCard(QFrame):
         
         items_text = ""
         order_items = self.order.get_order_items()
-        for item in order_items:
-            items_text += f"• {item['product'].name} x{item['quantity']} - ${item['price']:.2f}\n"
-            if item.get('notes'):
-                items_text += f"  Note: {item['notes']}\n"
+        
+        # Get a session to access product categories
+        from database.db_config import get_fresh_session
+        session = get_fresh_session()
+        
+        try:
+            for item in order_items:
+                product = item['product']
+                item_total = item['price'] * item['quantity']
+                tax_rate = 0.0
+                
+                # Get product with category from session to avoid lazy loading issues
+                try:
+                    from models.product import Product
+                    session_product = session.query(Product).filter_by(id=product.id).first()
+                    if session_product and hasattr(session_product, 'category') and session_product.category:
+                        tax_rate = getattr(session_product.category, 'tax_rate', 0.0)
+                except Exception as e:
+                    # If we can't get the category, just use 0 tax rate
+                    tax_rate = 0.0
+                
+                items_text += f"• {product.name} x{item['quantity']} - ${item['price']:.2f}\n"
+                items_text += f"  Subtotal: ${item_total:.2f}"
+                if tax_rate > 0:
+                    item_tax = item_total * (tax_rate / 100.0)
+                    items_text += f" (Tax: {tax_rate}% = ${item_tax:.2f})"
+                items_text += "\n"
+                
+                if item.get('notes'):
+                    items_text += f"  Note: {item['notes']}\n"
+        finally:
+            session.close()
         
         if items_text:
             items_display = QLabel(items_text)
@@ -94,10 +122,33 @@ class OrderCard(QFrame):
             items_display.setWordWrap(True)
             layout.addWidget(items_display)
         
+        # Order totals breakdown
+        totals_layout = QVBoxLayout()
+        totals_layout.setSpacing(2)
+        
+        # Subtotal
+        subtotal_label = QLabel(f"Subtotal: ${self.order.subtotal:.2f}")
+        subtotal_label.setStyleSheet("color: #555; font-size: 12px;")
+        totals_layout.addWidget(subtotal_label)
+        
+        # Tax amount
+        if self.order.tax_amount > 0:
+            tax_label = QLabel(f"Tax: ${self.order.tax_amount:.2f}")
+            tax_label.setStyleSheet("color: #e67e22; font-size: 12px;")
+            totals_layout.addWidget(tax_label)
+        
+        # Discount amount
+        if self.order.discount_amount > 0:
+            discount_label = QLabel(f"Discount: -${self.order.discount_amount:.2f}")
+            discount_label.setStyleSheet("color: #e74c3c; font-size: 12px;")
+            totals_layout.addWidget(discount_label)
+        
         # Total amount
         total_label = QLabel(f"Total: ${self.order.total_amount:.2f}")
-        total_label.setStyleSheet("font-weight: bold; color: #27ae60; font-size: 15px; margin-top: 10px;")
-        layout.addWidget(total_label)
+        total_label.setStyleSheet("font-weight: bold; color: #27ae60; font-size: 15px; margin-top: 5px;")
+        totals_layout.addWidget(total_label)
+        
+        layout.addLayout(totals_layout)
         
         # Time created
         time_label = QLabel(f"Created: {self.order.created_at.strftime('%I:%M:%S %p')}")
@@ -349,19 +400,19 @@ class OrderResetDialog(QDialog):
         """)
         layout.addWidget(warning_label)
         
-        # Sales report warning
-        sales_report_warning = QLabel("📊 Note: Resetting orders will affect sales reports. Order data will show as 'No order data available' in daily sales reports.")
-        sales_report_warning.setStyleSheet("""
-            color: #f39c12;
+        # Sales report info
+        sales_report_info = QLabel("📊 Note: Orders will be archived instead of deleted to preserve sales report data.")
+        sales_report_info.setStyleSheet("""
+            color: #27ae60;
             font-weight: bold;
             font-size: 12px;
             padding: 8px;
-            background-color: #fef9e7;
-            border: 1px solid #f39c12;
+            background-color: #e8f5e8;
+            border: 1px solid #27ae60;
             border-radius: 5px;
             margin: 5px 0;
         """)
-        layout.addWidget(sales_report_warning)
+        layout.addWidget(sales_report_info)
         
         # Description
         desc_label = QLabel("Select what you want to reset in the order manager:")
@@ -374,26 +425,26 @@ class OrderResetDialog(QDialog):
         self.radio_group = QButtonGroup()
         
         # All orders option
-        all_radio = QRadioButton("Reset All Orders (Active, Completed, Cancelled, Old)")
+        all_radio = QRadioButton("Archive All Orders (Active, Completed, Cancelled, Old)")
         all_radio.setChecked(True)
         all_radio.setStyleSheet("font-weight: bold; color: #e74c3c;")
         self.radio_group.addButton(all_radio, 0)
         layout.addWidget(all_radio)
         
         # Active orders option
-        active_radio = QRadioButton("Clear Active Orders Only")
+        active_radio = QRadioButton("Archive Active Orders Only")
         active_radio.setStyleSheet("color: #3498db;")
         self.radio_group.addButton(active_radio, 1)
         layout.addWidget(active_radio)
         
         # Completed orders option
-        completed_radio = QRadioButton("Clear Completed Orders Only")
+        completed_radio = QRadioButton("Archive Completed Orders Only")
         completed_radio.setStyleSheet("color: #27ae60;")
         self.radio_group.addButton(completed_radio, 2)
         layout.addWidget(completed_radio)
         
         # Cancelled orders option
-        cancelled_radio = QRadioButton("Clear Cancelled Orders Only")
+        cancelled_radio = QRadioButton("Archive Cancelled Orders Only")
         cancelled_radio.setStyleSheet("color: #f39c12;")
         self.radio_group.addButton(cancelled_radio, 3)
         layout.addWidget(cancelled_radio)
@@ -496,7 +547,8 @@ class OrderResetDialog(QDialog):
         reply = QMessageBox.question(
             self,
             "Confirm Reset",
-            f"Are you absolutely sure you want to reset {reset_type_name}?\n\n"
+            f"Are you absolutely sure you want to archive {reset_type_name}?\n\n"
+            "Orders will be archived (not deleted) to preserve sales report data.\n"
             "This action cannot be undone!",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
@@ -565,18 +617,21 @@ class OrderManagementWidget(QWidget):
         """)
         header_layout.addWidget(refresh_btn)
         
-        # Reset button
-        reset_btn = QPushButton("Reset")
-        reset_btn.clicked.connect(self.show_reset_dialog)
-        reset_btn.setStyleSheet("""
-            background-color: #e74c3c;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 8px 16px;
-            font-weight: bold;
-        """)
-        header_layout.addWidget(reset_btn)
+
+        
+        # Reset button - only show for admin users
+        if self.user.role.value == "admin":
+            reset_btn = QPushButton("Reset")
+            reset_btn.clicked.connect(self.show_reset_dialog)
+            reset_btn.setStyleSheet("""
+                background-color: #e74c3c;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-weight: bold;
+            """)
+            header_layout.addWidget(reset_btn)
         
         layout.addLayout(header_layout)
         
@@ -745,6 +800,8 @@ class OrderManagementWidget(QWidget):
         else:
             QMessageBox.warning(self, "Error", "Could not find cart widget.")
     
+
+
     def show_reset_dialog(self):
         """Show the order reset dialog."""
         dialog = OrderResetDialog(self.user, self)
@@ -756,16 +813,17 @@ class OrderManagementWidget(QWidget):
             
             if results["success"]:
                 # Show success message with details
-                total_cleared = (results["active_cleared"] + results["completed_cleared"] + 
-                               results["cancelled_cleared"] + results["old_cleared"])
+                total_archived = (results["active_archived"] + results["completed_archived"] + 
+                                results["cancelled_archived"])
                 
                 message = f"Order manager reset completed successfully!\n\n"
-                message += f"Orders cleared:\n"
-                message += f"• Active: {results['active_cleared']}\n"
-                message += f"• Completed: {results['completed_cleared']}\n"
-                message += f"• Cancelled: {results['cancelled_cleared']}\n"
-                message += f"• Old: {results['old_cleared']}\n"
-                message += f"• Total: {total_cleared}"
+                message += f"Orders archived:\n"
+                message += f"• Active: {results['active_archived']}\n"
+                message += f"• Completed: {results['completed_archived']}\n"
+                message += f"• Cancelled: {results['cancelled_archived']}\n"
+                message += f"• Old orders cleared: {results['old_cleared']}\n"
+                message += f"• Total archived: {total_archived}"
+                message += f"\n\n📊 Note: Order data is preserved for sales reports!"
                 
                 if results["errors"]:
                     message += f"\n\nWarnings: {len(results['errors'])} errors occurred during reset."

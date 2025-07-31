@@ -11,7 +11,7 @@ from models.user import User
 from utils.localization import get_current_local_time
 import uuid
 import logging
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -127,9 +127,25 @@ class OrderController:
             if not hasattr(order, 'discount_amount') or order.discount_amount is None:
                 order.discount_amount = 0.0
             
-            # Calculate tax (could be based on product categories)
-            if not hasattr(order, 'tax_amount') or order.tax_amount is None:
-                order.tax_amount = 0.0
+            # Calculate tax based on product categories
+            total_tax = 0.0
+            for item in items:
+                product = item['product']
+                item_total = item['price'] * item['quantity']
+                
+                # Get product with category from session to avoid lazy loading issues
+                try:
+                    session_product = self.session.query(Product).filter_by(id=product.id).first()
+                    if session_product and hasattr(session_product, 'category') and session_product.category:
+                        tax_rate = getattr(session_product.category, 'tax_rate', 0.0)
+                        item_tax = item_total * (tax_rate / 100.0)
+                        total_tax += item_tax
+                except Exception as e:
+                    # If we can't get the category, just use 0 tax rate
+                    logger.warning(f"Could not get tax rate for product {product.id}: {e}")
+                    continue
+            
+            order.tax_amount = total_tax
             
             # Calculate total
             order.total_amount = subtotal - order.discount_amount + order.tax_amount
@@ -161,22 +177,35 @@ class OrderController:
     
     def get_active_orders(self) -> List[Order]:
         """
-        Get all active orders.
+        Get all active orders (excluding archived ones).
         
         Returns:
             List[Order]: List of active orders
         """
         try:
-            return self.session.query(Order).filter(
-                Order.status == OrderStatus.ACTIVE
+            orders = self.session.query(Order).filter(
+                and_(
+                    Order.status == OrderStatus.ACTIVE,
+                    or_(
+                        Order.notes.is_(None),
+                        ~Order.notes.like('[ARCHIVED]%')  # Exclude archived orders
+                    )
+                )
             ).order_by(Order.created_at.desc()).all()
+            
+            # Ensure all orders have proper tax calculation
+            for order in orders:
+                if order.tax_amount == 0.0 and order.subtotal > 0:
+                    self._update_order_totals(order)
+            
+            return orders
         except Exception as e:
             logger.error(f"Error getting active orders: {e}")
             return []
     
     def get_completed_orders(self, limit: int = 50) -> List[Order]:
         """
-        Get completed orders.
+        Get completed orders (excluding archived ones).
         
         Args:
             limit: Maximum number of orders to return
@@ -185,16 +214,29 @@ class OrderController:
             List[Order]: List of completed orders
         """
         try:
-            return self.session.query(Order).filter(
-                Order.status == OrderStatus.COMPLETED
+            orders = self.session.query(Order).filter(
+                and_(
+                    Order.status == OrderStatus.COMPLETED,
+                    or_(
+                        Order.notes.is_(None),
+                        ~Order.notes.like('[ARCHIVED]%')  # Exclude archived orders
+                    )
+                )
             ).order_by(Order.completed_at.desc()).limit(limit).all()
+            
+            # Ensure all orders have proper tax calculation
+            for order in orders:
+                if order.tax_amount == 0.0 and order.subtotal > 0:
+                    self._update_order_totals(order)
+            
+            return orders
         except Exception as e:
             logger.error(f"Error getting completed orders: {e}")
             return []
     
     def get_cancelled_orders(self, limit: int = 50) -> List[Order]:
         """
-        Get cancelled orders.
+        Get cancelled orders (excluding archived ones).
         
         Args:
             limit: Maximum number of orders to return
@@ -203,9 +245,22 @@ class OrderController:
             List[Order]: List of cancelled orders
         """
         try:
-            return self.session.query(Order).filter(
-                Order.status == OrderStatus.CANCELLED
+            orders = self.session.query(Order).filter(
+                and_(
+                    Order.status == OrderStatus.CANCELLED,
+                    or_(
+                        Order.notes.is_(None),
+                        ~Order.notes.like('[ARCHIVED]%')  # Exclude archived orders
+                    )
+                )
             ).order_by(Order.cancelled_at.desc()).limit(limit).all()
+            
+            # Ensure all orders have proper tax calculation
+            for order in orders:
+                if order.tax_amount == 0.0 and order.subtotal > 0:
+                    self._update_order_totals(order)
+            
+            return orders
         except Exception as e:
             logger.error(f"Error getting cancelled orders: {e}")
             return []
@@ -221,7 +276,13 @@ class OrderController:
             Optional[Order]: The order if found, None otherwise
         """
         try:
-            return self.session.query(Order).filter_by(id=order_id).one()
+            order = self.session.query(Order).filter_by(id=order_id).one()
+            
+            # Ensure order has proper tax calculation
+            if order and order.tax_amount == 0.0 and order.subtotal > 0:
+                self._update_order_totals(order)
+            
+            return order
         except NoResultFound:
             return None
         except Exception as e:
@@ -239,7 +300,13 @@ class OrderController:
             Optional[Order]: The order if found, None otherwise
         """
         try:
-            return self.session.query(Order).filter_by(order_number=order_number).one()
+            order = self.session.query(Order).filter_by(order_number=order_number).one()
+            
+            # Ensure order has proper tax calculation
+            if order and order.tax_amount == 0.0 and order.subtotal > 0:
+                self._update_order_totals(order)
+            
+            return order
         except NoResultFound:
             return None
         except Exception as e:
@@ -391,7 +458,9 @@ class OrderController:
             int: Number of orders created today
         """
         try:
-            today = datetime.now().date()
+            # Use local time for consistent timezone handling
+            now = get_current_local_time()
+            today = now.date()
             today_start = datetime.combine(today, datetime.min.time())
             today_end = datetime.combine(today, datetime.max.time())
             
@@ -413,7 +482,9 @@ class OrderController:
             List[Order]: List of orders created today
         """
         try:
-            today = datetime.now().date()
+            # Use local time for consistent timezone handling
+            now = get_current_local_time()
+            today = now.date()
             today_start = datetime.combine(today, datetime.min.time())
             today_end = datetime.combine(today, datetime.max.time())
             
@@ -436,7 +507,7 @@ class OrderController:
             int: Number of orders removed
         """
         try:
-            cutoff_time = datetime.now() - timedelta(hours=hours_old)
+            cutoff_time = get_current_local_time() - timedelta(hours=hours_old)
             
             # Find completed and cancelled orders older than cutoff time
             old_orders = self.session.query(Order).filter(
@@ -539,12 +610,14 @@ class OrderController:
     def reset_order_manager(self, reset_type: str = "all", user: User = None) -> Dict[str, any]:
         """
         Reset the order management system based on the specified type.
+        Instead of deleting orders, this method moves them to an archived state
+        to preserve data for sales reports.
         
         Args:
             reset_type: Type of reset to perform
-                - "active": Clear all active orders
-                - "completed": Clear all completed orders
-                - "cancelled": Clear all cancelled orders
+                - "active": Archive all active orders
+                - "completed": Archive all completed orders
+                - "cancelled": Archive all cancelled orders
                 - "old": Clean up old orders (older than 24 hours)
                 - "all": Perform all resets
             user: User performing the reset (for logging)
@@ -555,9 +628,9 @@ class OrderController:
         try:
             results = {
                 "success": True,
-                "active_cleared": 0,
-                "completed_cleared": 0,
-                "cancelled_cleared": 0,
+                "active_archived": 0,
+                "completed_archived": 0,
+                "cancelled_archived": 0,
                 "old_cleared": 0,
                 "errors": []
             }
@@ -566,76 +639,67 @@ class OrderController:
             logger.info(f"Order manager reset initiated by {user_name} - Type: {reset_type}")
             
             if reset_type in ["active", "all"]:
-                # Clear active orders
+                # Archive active orders instead of deleting them
                 active_orders = self.get_active_orders()
                 for order in active_orders:
                     try:
-                        # Delete order items first
-                        from models.order import order_products
-                        self.session.execute(
-                            order_products.delete().where(order_products.c.order_id == order.id)
-                        )
+                        # Mark order as archived by adding a special note
+                        order.notes = f"[ARCHIVED] {order.notes or ''}"
+                        order.status = OrderStatus.CANCELLED  # Change status to cancelled
+                        order.cancelled_by = user.id if user else None
+                        order.cancelled_reason = "Archived during order manager reset"
+                        order.updated_at = get_current_local_time()
                         
-                        # Delete the order
-                        self.session.delete(order)
-                        results["active_cleared"] += 1
-                        logger.info(f"Cleared active order {order.order_number}")
+                        results["active_archived"] += 1
+                        logger.info(f"Archived active order {order.order_number}")
                     except Exception as e:
-                        error_msg = f"Error clearing active order {order.order_number}: {e}"
+                        error_msg = f"Error archiving active order {order.order_number}: {e}"
                         logger.error(error_msg)
                         results["errors"].append(error_msg)
             
             if reset_type in ["completed", "all"]:
-                # Clear completed orders
+                # Archive completed orders instead of deleting them
                 completed_orders = self.get_completed_orders(limit=1000)  # Get all completed orders
                 for order in completed_orders:
                     try:
-                        # Delete order items first
-                        from models.order import order_products
-                        self.session.execute(
-                            order_products.delete().where(order_products.c.order_id == order.id)
-                        )
+                        # Mark order as archived by adding a special note
+                        order.notes = f"[ARCHIVED] {order.notes or ''}"
+                        order.updated_at = get_current_local_time()
                         
-                        # Delete the order
-                        self.session.delete(order)
-                        results["completed_cleared"] += 1
-                        logger.info(f"Cleared completed order {order.order_number}")
+                        results["completed_archived"] += 1
+                        logger.info(f"Archived completed order {order.order_number}")
                     except Exception as e:
-                        error_msg = f"Error clearing completed order {order.order_number}: {e}"
+                        error_msg = f"Error archiving completed order {order.order_number}: {e}"
                         logger.error(error_msg)
                         results["errors"].append(error_msg)
             
             if reset_type in ["cancelled", "all"]:
-                # Clear cancelled orders
+                # Archive cancelled orders instead of deleting them
                 cancelled_orders = self.get_cancelled_orders(limit=1000)  # Get all cancelled orders
                 for order in cancelled_orders:
                     try:
-                        # Delete order items first
-                        from models.order import order_products
-                        self.session.execute(
-                            order_products.delete().where(order_products.c.order_id == order.id)
-                        )
+                        # Mark order as archived by adding a special note
+                        order.notes = f"[ARCHIVED] {order.notes or ''}"
+                        order.updated_at = get_current_local_time()
                         
-                        # Delete the order
-                        self.session.delete(order)
-                        results["cancelled_cleared"] += 1
-                        logger.info(f"Cleared cancelled order {order.order_number}")
+                        results["cancelled_archived"] += 1
+                        logger.info(f"Archived cancelled order {order.order_number}")
                     except Exception as e:
-                        error_msg = f"Error clearing cancelled order {order.order_number}: {e}"
+                        error_msg = f"Error archiving cancelled order {order.order_number}: {e}"
                         logger.error(error_msg)
                         results["errors"].append(error_msg)
             
             if reset_type in ["old", "all"]:
-                # Clean up old orders (older than 24 hours)
+                # Clean up old orders (older than 24 hours) - this still deletes them
                 results["old_cleared"] = self.cleanup_old_completed_orders(hours_old=24)
             
             # Commit all changes
             if safe_commit(self.session):
-                total_cleared = (results["active_cleared"] + results["completed_cleared"] + 
-                               results["cancelled_cleared"] + results["old_cleared"])
+                total_archived = (results["active_archived"] + results["completed_archived"] + 
+                                results["cancelled_archived"])
                 
                 logger.info(f"Order manager reset completed by {user_name}. "
-                           f"Total orders cleared: {total_cleared}")
+                           f"Total orders archived: {total_archived}, old orders cleared: {results['old_cleared']}")
                 
                 if results["errors"]:
                     results["success"] = False
@@ -698,7 +762,7 @@ class OrderController:
     
     def has_order_data_for_date(self, target_date: date) -> bool:
         """
-        Check if order data exists for a given date.
+        Check if order data exists for a given date (including archived orders).
         
         Args:
             target_date: The date to check for order data
@@ -722,6 +786,95 @@ class OrderController:
             logger.error(f"Error checking order data for date {target_date}: {e}")
             return False
     
+    def get_all_orders_for_date(self, target_date: date) -> List[Order]:
+        """
+        Get all orders for a given date (including archived ones) for reporting purposes.
+        
+        Args:
+            target_date: The date to get orders for
+            
+        Returns:
+            List[Order]: List of all orders for the date
+        """
+        try:
+            start_datetime = datetime.combine(target_date, time.min)
+            end_datetime = datetime.combine(target_date, time.max)
+            
+            orders = self.session.query(Order).filter(
+                and_(
+                    Order.created_at >= start_datetime,
+                    Order.created_at <= end_datetime
+                )
+            ).order_by(Order.created_at.desc()).all()
+            
+            return orders
+        except Exception as e:
+            logger.error(f"Error getting orders for date {target_date}: {e}")
+            return []
+    
+    def recalculate_all_orders_tax(self) -> Dict[str, int]:
+        """
+        Recalculate tax amounts for all orders based on current product categories.
+        This is useful after updating tax rates or when fixing existing orders.
+        
+        Returns:
+            Dict[str, int]: Results of the recalculation
+        """
+        try:
+            results = {
+                "success": True,
+                "orders_updated": 0,
+                "orders_skipped": 0,
+                "errors": []
+            }
+            
+            # Get all orders
+            all_orders = self.session.query(Order).all()
+            
+            for order in all_orders:
+                try:
+                    # Store original values for comparison
+                    original_tax = order.tax_amount
+                    original_total = order.total_amount
+                    
+                    # Update totals (this will recalculate tax)
+                    self._update_order_totals(order)
+                    
+                    # Check if values changed
+                    if (abs(order.tax_amount - original_tax) > 0.01 or 
+                        abs(order.total_amount - original_total) > 0.01):
+                        results["orders_updated"] += 1
+                        logger.info(f"Updated tax for order {order.order_number}: "
+                                  f"tax ${original_tax:.2f} -> ${order.tax_amount:.2f}, "
+                                  f"total ${original_total:.2f} -> ${order.total_amount:.2f}")
+                    else:
+                        results["orders_skipped"] += 1
+                        
+                except Exception as e:
+                    error_msg = f"Error updating order {order.order_number}: {e}"
+                    logger.error(error_msg)
+                    results["errors"].append(error_msg)
+            
+            # Commit all changes
+            if safe_commit(self.session):
+                logger.info(f"Tax recalculation completed: {results['orders_updated']} updated, "
+                           f"{results['orders_skipped']} skipped")
+                return results
+            else:
+                error_msg = "Failed to commit tax recalculation"
+                logger.error(error_msg)
+                results["success"] = False
+                results["errors"].append(error_msg)
+                return results
+                
+        except Exception as e:
+            error_msg = f"Error during tax recalculation: {e}"
+            logger.error(error_msg)
+            results["success"] = False
+            results["errors"].append(error_msg)
+            self.session.rollback()
+            return results
+
     def __del__(self):
         """Clean up the session."""
         if hasattr(self, 'session'):

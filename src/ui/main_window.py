@@ -438,7 +438,7 @@ class ModernPOSWidget(QWidget):
             else:
                 btn = self.create_category_card(
                     category.name, 
-                    '#95a5a6', 
+                    '#499167', 
                     'white', 
                     card_width,
                     card_height
@@ -465,7 +465,7 @@ class ModernPOSWidget(QWidget):
         # Create simple text without icon
         btn.setText(text)
         
-        # Enhanced styling with better visual hierarchy (Qt-compatible)
+        # Enhanced styling with better visual hierarchy and improved font (Qt-compatible)
         btn.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -473,21 +473,28 @@ class ModernPOSWidget(QWidget):
                 color: {text_color};
                 border: 2px solid {self.lighten_color(bg_color)};
                 border-radius: 12px;
-                font-size: 14px;
-                font-weight: bold;
-                padding: 10px;
+                font-family: 'Segoe UI', 'Arial', sans-serif;
+                font-size: 16px;
+                font-weight: 600;
+                font-style: normal;
                 text-align: center;
-                margin: 2px;
+                padding: 12px 8px;
+                margin: 3px;
+                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+                letter-spacing: 0.5px;
             }}
             QPushButton:hover {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 {self.lighten_color(bg_color)}, stop:1 {bg_color});
                 border: 3px solid white;
+                font-weight: 700;
+                text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.4);
             }}
             QPushButton:pressed {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 {self.darken_color(bg_color)}, stop:1 {bg_color});
                 border: 2px solid {self.darken_color(bg_color)};
+                font-weight: 700;
             }}
         """)
         

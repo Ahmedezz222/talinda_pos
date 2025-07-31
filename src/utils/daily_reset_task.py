@@ -10,9 +10,10 @@ import time as time_module
 logger = logging.getLogger(__name__)
 
 class DailyResetTask(QThread):
-    """Background task that resets daily sales data at midnight."""
+    """Background task that resets daily sales data and closes shifts at midnight."""
     
     reset_triggered = pyqtSignal()  # Signal emitted when reset is triggered
+    shift_closing_triggered = pyqtSignal(int)  # Signal emitted when shifts are closed (with count)
     
     def __init__(self):
         super().__init__()
@@ -50,9 +51,26 @@ class DailyResetTask(QThread):
                     if (self.last_reset_time is None or 
                         (now - self.last_reset_time).total_seconds() > self.reset_cooldown):
                         
-                        logger.info("Midnight reached - triggering daily sales reset")
+                        logger.info("Midnight reached - triggering daily sales reset and shift closing")
                         self.last_reset_time = now
                         self.reset_triggered.emit()
+                        
+                        # Also trigger shift closing notification if enabled
+                        try:
+                            from config import config
+                            if config.AUTO_CLOSE_SHIFTS_AT_MIDNIGHT:
+                                from controllers.shift_controller import ShiftController
+                                shift_controller = ShiftController()
+                                closed_count = shift_controller.close_all_open_shifts()
+                                if config.SHIFT_CLOSE_NOTIFICATION_ENABLED:
+                                    self.shift_closing_triggered.emit(closed_count)
+                                logger.info(f"Automatically closed {closed_count} shifts at midnight")
+                            else:
+                                logger.info("Automatic shift closing is disabled in configuration")
+                                self.shift_closing_triggered.emit(0)
+                        except Exception as e:
+                            logger.error(f"Error in automatic shift closing: {e}")
+                            self.shift_closing_triggered.emit(0)
                         
                         # Sleep for 2 minutes to avoid multiple triggers
                         for _ in range(120):

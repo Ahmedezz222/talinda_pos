@@ -97,7 +97,31 @@ class Order(Base):
         try:
             items = self.get_order_items()
             self.subtotal = sum(item['price'] * item['quantity'] for item in items)
-            # Apply any discounts and tax calculations here
+            
+            # Calculate tax based on product categories
+            total_tax = 0.0
+            for item in items:
+                product = item['product']
+                item_total = item['price'] * item['quantity']
+                
+                # Get product with category from session to avoid lazy loading issues
+                try:
+                    from database.db_config import get_fresh_session
+                    session = get_fresh_session()
+                    session_product = session.query(Product).filter_by(id=product.id).first()
+                    if session_product and hasattr(session_product, 'category') and session_product.category:
+                        tax_rate = getattr(session_product.category, 'tax_rate', 0.0)
+                        item_tax = item_total * (tax_rate / 100.0)
+                        total_tax += item_tax
+                    session.close()
+                except Exception as e:
+                    # If we can't get the category, just use 0 tax rate
+                    logger.warning(f"Could not get tax rate for product {product.id}: {e}")
+                    continue
+            
+            self.tax_amount = total_tax
+            
+            # Calculate total
             self.total_amount = self.subtotal - self.discount_amount + self.tax_amount
         except Exception as e:
             logger.error(f"Error updating order totals: {e}")

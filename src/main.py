@@ -740,6 +740,7 @@ class ApplicationManager:
             # Initialize daily reset task
             self.daily_reset_task = DailyResetTask()
             self.daily_reset_task.reset_triggered.connect(self.on_daily_reset)
+            self.daily_reset_task.shift_closing_triggered.connect(self.on_shift_closing)
             self.daily_reset_task.start()
             
             # Complete initialization
@@ -885,6 +886,33 @@ class ApplicationManager:
             # Check if there's already an open shift
             from controllers.shift_controller import ShiftController
             shift_controller = ShiftController()
+            
+            # Check if this user had a shift that was automatically closed
+            from datetime import datetime, time, timedelta
+            from models.user import Shift, ShiftStatus
+            from sqlalchemy import and_
+            today = datetime.now().date()
+            yesterday = today - timedelta(days=1)
+            
+            # Look for shifts that were closed automatically at midnight
+            auto_closed_shift = shift_controller.session.query(Shift).filter(
+                and_(
+                    Shift.user_id == user.id,
+                    Shift.status == ShiftStatus.CLOSED,
+                    Shift.close_time >= datetime.combine(yesterday, time(23, 59)),
+                    Shift.close_time <= datetime.combine(today, time(0, 1))
+                )
+            ).first()
+            
+            if auto_closed_shift:
+                # Show notification about automatic shift closure
+                self.show_message_once(
+                    "info",
+                    "Previous Shift Auto-Closed",
+                    f"Your previous shift was automatically closed at midnight.\n"
+                    f"You can now start a new shift for today.",
+                    None
+                )
             
             any_open_shift = shift_controller.get_any_open_shift()
             if any_open_shift and any_open_shift.user_id != user.id:
@@ -1090,7 +1118,7 @@ Total Amount: ${shift_summary.get('total_amount', 0):.2f}
     def on_orders_auto_closed(self, count: int):
         """Handle orders auto-closed event."""
         self.logger.info(f"Background task auto-closed {count} orders")
-        # Only show notification if count > 0 and not too frequently
+       # Only show notification if count > 0 and not too frequently
         if count > 0 and self.main_window:
             try:
                 self.show_message_once(
@@ -1146,7 +1174,7 @@ Total Amount: ${shift_summary.get('total_amount', 0):.2f}
                 self.show_message_once(
                     "info",
                     "Daily Reset",
-                    "Daily sales data has been reset for the new day.",
+                    "Daily sales data has been reset for the new day.\nAll shifts have been automatically closed.",
                     self.main_window
                 )
                 
@@ -1159,6 +1187,33 @@ Total Amount: ${shift_summary.get('total_amount', 0):.2f}
                     f"Error during daily reset: {str(e)}",
                     self.main_window
                 )
+    
+    def on_shift_closing(self, closed_count: int):
+        """Handle automatic shift closing notification."""
+        try:
+            self.logger.info(f"Automatic shift closing completed: {closed_count} shifts closed")
+            
+            # Only show notification if main window exists
+            if self.main_window:
+                if closed_count > 0:
+                    self.show_message_once(
+                        "warning",
+                        "Shift Auto-Closed",
+                        f"Your shift has been automatically closed at midnight.\n"
+                        f"You will need to log in again with your password to start a new shift.\n\n"
+                        f"Total shifts closed: {closed_count}",
+                        self.main_window
+                    )
+                else:
+                    self.show_message_once(
+                        "info",
+                        "Daily Reset",
+                        "Daily reset completed. No open shifts were found.",
+                        self.main_window
+                    )
+                    
+        except Exception as e:
+            self.logger.error(f"Error handling shift closing notification: {e}")
     
     def cleanup(self):
         """Clean up resources before application exit."""

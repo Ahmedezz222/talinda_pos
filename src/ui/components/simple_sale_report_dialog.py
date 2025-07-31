@@ -106,6 +106,10 @@ class SimpleSaleReportDialog(QDialog):
         self.shifts_tab = self.create_shifts_tab()
         self.tab_widget.addTab(self.shifts_tab, "👥 Cashier Shifts")
         
+        # Product Details tab
+        self.product_tab = self.create_product_tab()
+        self.tab_widget.addTab(self.product_tab, "📦 Product Details")
+        
         # Sales Details tab
         self.sales_tab = self.create_sales_tab()
         self.tab_widget.addTab(self.sales_tab, "🛒 Sales Details")
@@ -193,6 +197,10 @@ class SimpleSaleReportDialog(QDialog):
         group_layout.addWidget(QLabel("Average Sale:"), 2, 0)
         group_layout.addWidget(self.average_sale_label, 2, 1)
         
+        group_layout.addWidget(QLabel("Total Quantity Sold:"), 3, 0)
+        self.total_quantity_summary_label = self.create_metric_label("0")
+        group_layout.addWidget(self.total_quantity_summary_label, 3, 1)
+        
         layout.addWidget(group)
         layout.addStretch()
         
@@ -239,6 +247,58 @@ class SimpleSaleReportDialog(QDialog):
             text-align: center;
         """)
         layout.addWidget(description)
+        
+        # Product Summary Section
+        product_summary_group = QGroupBox("Product Summary")
+        product_summary_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 16px;
+                border: 2px solid #3498db;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        
+        product_summary_layout = QGridLayout(product_summary_group)
+        product_summary_layout.setSpacing(15)
+        
+        # Create product summary labels
+        self.total_products_sold_label = QLabel("0")
+        self.total_quantity_sold_label = QLabel("0")
+        self.top_product_label = QLabel("None")
+        
+        # Style the product summary labels
+        summary_font = QFont()
+        summary_font.setPointSize(14)
+        summary_font.setBold(True)
+        
+        self.total_products_sold_label.setFont(summary_font)
+        self.total_quantity_sold_label.setFont(summary_font)
+        self.top_product_label.setFont(summary_font)
+        
+        # Color code the labels
+        self.total_products_sold_label.setStyleSheet("color: #27ae60;")
+        self.total_quantity_sold_label.setStyleSheet("color: #3498db;")
+        self.top_product_label.setStyleSheet("color: #e67e22;")
+        
+        # Add to layout
+        product_summary_layout.addWidget(QLabel("Total Products Sold:"), 0, 0)
+        product_summary_layout.addWidget(self.total_products_sold_label, 0, 1)
+        
+        product_summary_layout.addWidget(QLabel("Total Quantity Sold:"), 1, 0)
+        product_summary_layout.addWidget(self.total_quantity_sold_label, 1, 1)
+        
+        product_summary_layout.addWidget(QLabel("Top Selling Product:"), 2, 0)
+        product_summary_layout.addWidget(self.top_product_label, 2, 1)
+        
+        layout.addWidget(product_summary_group)
         
         # Create sales table
         self.sales_table = QTableWidget()
@@ -346,6 +406,73 @@ class SimpleSaleReportDialog(QDialog):
         
         return widget
 
+    def create_product_tab(self) -> QWidget:
+        """Create the product details tab showing quantity and product information."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Title
+        title = QLabel("Product Sales Summary")
+        title.setStyleSheet("""
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        """)
+        layout.addWidget(title)
+        
+        # Description
+        description = QLabel("View total quantities sold for each product on the selected date.")
+        description.setStyleSheet("""
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 20px;
+            text-align: center;
+        """)
+        layout.addWidget(description)
+        
+        # Create product details table
+        self.product_table = QTableWidget()
+        self.product_table.setColumnCount(6)
+        self.product_table.setHorizontalHeaderLabels([
+            "Product Name", "Category", "Quantity Sold", "Unit Price", "Total Amount", "Sales Count"
+        ])
+        
+        # Set table properties
+        header = self.product_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        
+        # Style the table
+        self.product_table.setAlternatingRowColors(True)
+        self.product_table.setStyleSheet("""
+            QTableWidget {
+                gridline-color: #bdc3c7;
+                background-color: white;
+                alternate-background-color: #f8f9fa;
+                border: 1px solid #bdc3c7;
+                border-radius: 5px;
+            }
+            QHeaderView::section {
+                background-color: #27ae60;
+                color: white;
+                padding: 10px;
+                border: none;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QTableWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #ecf0f1;
+            }
+        """)
+        
+        layout.addWidget(self.product_table)
+        
+        return widget
+
     def load_report_data(self):
         """Load and display the report data."""
         try:
@@ -358,14 +485,105 @@ class SimpleSaleReportDialog(QDialog):
             self.total_amount_label.setText(f"${total_amount:.2f}")
             self.average_sale_label.setText(f"${average_sale:.2f}")
             
+            # Update total quantity summary
+            product_details = self.report_data.get('product_details', [])
+            total_quantity = sum(item.get('quantity_sold', 0) for item in product_details)
+            self.total_quantity_summary_label.setText(str(total_quantity))
+            
+            # Update product summary
+            self.update_product_summary()
+
             # Update shifts table
             self.update_shifts_table()
+            
+            # Update product table
+            self.update_product_table()
             
             # Update sales table
             self.update_sales_table()
             
         except Exception as e:
             logger.error(f"Error loading report data: {e}")
+
+    def update_product_summary(self):
+        """Update the product summary section with aggregated data."""
+        try:
+            # Get product details from the report data
+            product_details = self.report_data.get('product_details', [])
+            
+            # Calculate totals
+            total_products_sold = len(product_details)
+            total_quantity_sold = sum(item.get('quantity_sold', 0) for item in product_details)
+            
+            # Find top selling product
+            top_selling_product = "None"
+            if product_details:
+                top_item = max(product_details, key=lambda x: x.get('quantity_sold', 0))
+                top_selling_product = top_item.get('product_name', 'None')
+            
+            # Update labels
+            self.total_products_sold_label.setText(str(total_products_sold))
+            self.total_quantity_sold_label.setText(str(total_quantity_sold))
+            self.top_product_label.setText(top_selling_product)
+            
+        except Exception as e:
+            logger.error(f"Error updating product summary: {e}")
+            # Set default values on error
+            self.total_products_sold_label.setText("0")
+            self.total_quantity_sold_label.setText("0")
+            self.top_product_label.setText("None")
+
+    def update_product_table(self):
+        """Update the product details table with aggregated product data."""
+        try:
+            product_details = self.report_data.get('product_details', [])
+            
+            # Clear existing data
+            self.product_table.setRowCount(0)
+            
+            for item in product_details:
+                row = self.product_table.rowCount()
+                self.product_table.insertRow(row)
+                
+                # Product Name
+                name_item = QTableWidgetItem(item.get('product_name', 'N/A'))
+                self.product_table.setItem(row, 0, name_item)
+                
+                # Category
+                category_item = QTableWidgetItem(item.get('category', 'N/A'))
+                self.product_table.setItem(row, 1, category_item)
+                
+                # Quantity Sold
+                quantity_item = QTableWidgetItem(str(item.get('quantity_sold', 0)))
+                self.product_table.setItem(row, 2, quantity_item)
+                
+                # Unit Price
+                unit_price_item = QTableWidgetItem(f"${item.get('unit_price', 0):.2f}")
+                self.product_table.setItem(row, 3, unit_price_item)
+                
+                # Total Amount
+                total_amount_item = QTableWidgetItem(f"${item.get('total_amount', 0):.2f}")
+                self.product_table.setItem(row, 4, total_amount_item)
+                
+                # Sales Count
+                sales_count_item = QTableWidgetItem(str(item.get('sales_count', 0)))
+                self.product_table.setItem(row, 5, sales_count_item)
+                
+                # Color code rows based on quantity sold
+                quantity_sold = item.get('quantity_sold', 0)
+                if quantity_sold > 10:
+                    for col in range(6):
+                        item = self.product_table.item(row, col)
+                        if item:
+                            item.setBackground(QColor(220, 255, 220))  # Light green for high quantity
+                elif quantity_sold > 5:
+                    for col in range(6):
+                        item = self.product_table.item(row, col)
+                        if item:
+                            item.setBackground(QColor(255, 248, 220))  # Light yellow for medium quantity
+                
+        except Exception as e:
+            logger.error(f"Error updating product table: {e}")
 
     def update_sales_table(self):
         """Update the sales table with data."""
@@ -392,7 +610,14 @@ class SimpleSaleReportDialog(QDialog):
             self.sales_table.setItem(row, 2, product_item)
             
             # Quantity
-            quantity_item = QTableWidgetItem(str(item.get('quantity', 0)))
+            quantity = item.get('quantity', 0)
+            quantity_item = QTableWidgetItem(str(quantity))
+            # Make quantity more prominent with bold text for non-zero values
+            if quantity > 0:
+                font = quantity_item.font()
+                font.setBold(True)
+                quantity_item.setFont(font)
+                quantity_item.setBackground(QColor(240, 248, 255))  # Light blue background
             self.sales_table.setItem(row, 3, quantity_item)
             
             # Total Amount

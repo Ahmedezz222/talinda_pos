@@ -236,12 +236,9 @@ class ShiftController:
             # Get all orders for the day (including active, completed, and cancelled)
             # Handle case where order data might have been reset
             try:
-                daily_orders = self.session.query(Order).filter(
-                    and_(
-                        Order.created_at >= start_datetime,
-                        Order.created_at <= end_datetime
-                    )
-                ).all()
+                from controllers.order_controller import OrderController
+                order_controller = OrderController()
+                daily_orders = order_controller.get_all_orders_for_date(report_date)
             except Exception as e:
                 logger.warning(f"Error querying orders for daily report: {e}")
                 daily_orders = []
@@ -902,15 +899,65 @@ class ShiftController:
     
     def reset_daily_sales(self):
         """
-        Reset daily sales data (called automatically at midnight).
-        This is a placeholder for future implementation.
+        Reset daily sales data and automatically close all open shifts at midnight.
+        This ensures all cashiers must re-authenticate for the new day.
         """
         try:
-            logger.info("Daily sales reset triggered")
+            logger.info("Daily sales reset and automatic shift closing triggered")
+            
+            # Close all open shifts automatically
+            closed_shifts = self.close_all_open_shifts()
+            
+            logger.info(f"Automatically closed {closed_shifts} open shifts at midnight")
+            
             # In a real implementation, you might want to archive old data
             # or perform other cleanup operations
+            
         except Exception as e:
             logger.error(f"Error resetting daily sales: {e}")
+    
+    def close_all_open_shifts(self) -> int:
+        """
+        Automatically close all open shifts at the end of the day.
+        This forces cashiers to re-authenticate for the new day.
+        
+        Returns:
+            int: Number of shifts that were closed
+        """
+        try:
+            # Get all open shifts
+            open_shifts = self.session.query(Shift).filter_by(status=ShiftStatus.OPEN).all()
+            
+            closed_count = 0
+            for shift in open_shifts:
+                try:
+                    # Close the shift with current time
+                    shift.status = ShiftStatus.CLOSED
+                    shift.close_time = get_current_local_time()
+                    
+                    # Calculate shift duration
+                    if shift.open_time and shift.close_time:
+                        duration = shift.close_time - shift.open_time
+                        logger.info(f"Shift {shift.id} for user {shift.user.username if shift.user else 'Unknown'} "
+                                  f"closed automatically. Duration: {duration}")
+                    
+                    closed_count += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error closing shift {shift.id}: {e}")
+                    continue
+            
+            # Commit all changes
+            if safe_commit(self.session):
+                logger.info(f"Successfully closed {closed_count} open shifts")
+                return closed_count
+            else:
+                logger.error("Failed to commit shift closures")
+                return 0
+                
+        except Exception as e:
+            logger.error(f"Error in close_all_open_shifts: {e}")
+            return 0
     
     def __del__(self):
         """Clean up the session."""
