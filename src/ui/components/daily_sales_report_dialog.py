@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class DailySalesReportDialog(QDialog):
     def __init__(self, parent=None, report_data: Optional[Dict[str, Any]] = None):
         super().__init__(parent)
-        self.setWindowTitle('Daily Sales Report')
+        self.setWindowTitle('Accurate Sales Report (Completed Orders)')
         self.setMinimumSize(1000, 700)  # Increased size for new tab
         self.report_data = report_data or {}
         self.init_ui()
@@ -30,6 +30,11 @@ class DailySalesReportDialog(QDialog):
         # Header
         header_layout = QHBoxLayout()
         
+        # Title label
+        title_label = QLabel("📊 Accurate Sales Report - Completed Orders")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #2c3e50;")
+        header_layout.addWidget(title_label)
+        
         # Date selector
         date_label = QLabel("Report Date:")
         self.date_edit = QDateEdit()
@@ -37,9 +42,9 @@ class DailySalesReportDialog(QDialog):
         self.date_edit.setCalendarPopup(True)
         self.date_edit.dateChanged.connect(self.on_date_changed)
         
+        header_layout.addStretch()
         header_layout.addWidget(date_label)
         header_layout.addWidget(self.date_edit)
-        header_layout.addStretch()
         
         # Refresh button
         self.refresh_btn = QPushButton("🔄 Refresh Report")
@@ -123,8 +128,26 @@ class DailySalesReportDialog(QDialog):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
+        # Data Source Information group
+        data_source_group = QGroupBox("📋 Data Source Information")
+        data_source_layout = QGridLayout(data_source_group)
+        
+        # Data source label
+        self.data_source_label = QLabel("Completed Orders")
+        self.data_source_label.setStyleSheet("color: #27ae60; font-weight: bold; font-size: 14px;")
+        data_source_layout.addWidget(QLabel("Primary Data Source:"), 0, 0)
+        data_source_layout.addWidget(self.data_source_label, 0, 1)
+        
+        # Data availability label
+        self.data_availability_label = QLabel("Available")
+        self.data_availability_label.setStyleSheet("color: #27ae60; font-weight: bold; font-size: 14px;")
+        data_source_layout.addWidget(QLabel("Data Status:"), 1, 0)
+        data_source_layout.addWidget(self.data_availability_label, 1, 1)
+        
+        layout.addWidget(data_source_group)
+        
         # Key metrics group
-        metrics_group = QGroupBox("Daily Summary")
+        metrics_group = QGroupBox("📊 Daily Summary (Completed Orders)")
         metrics_layout = QGridLayout(metrics_group)
         
         # Create metric labels
@@ -146,25 +169,25 @@ class DailySalesReportDialog(QDialog):
         self.average_transaction_label.setFont(metric_font)
         
         # Add to layout
-        metrics_layout.addWidget(QLabel("Total Sales:"), 0, 0)
+        metrics_layout.addWidget(QLabel("Completed Orders:"), 0, 0)
         metrics_layout.addWidget(self.total_sales_label, 0, 1)
         
-        metrics_layout.addWidget(QLabel("Total Orders:"), 1, 0)
+        metrics_layout.addWidget(QLabel("Total Transactions:"), 1, 0)
         metrics_layout.addWidget(self.total_orders_label, 1, 1)
         
-        metrics_layout.addWidget(QLabel("Total Transactions:"), 2, 0)
+        metrics_layout.addWidget(QLabel("Total Orders:"), 2, 0)
         metrics_layout.addWidget(self.total_transactions_label, 2, 1)
         
-        metrics_layout.addWidget(QLabel("Total Amount:"), 3, 0)
+        metrics_layout.addWidget(QLabel("Total Revenue:"), 3, 0)
         metrics_layout.addWidget(self.total_amount_label, 3, 1)
         
-        metrics_layout.addWidget(QLabel("Average Transaction:"), 4, 0)
+        metrics_layout.addWidget(QLabel("Average Order Value:"), 4, 0)
         metrics_layout.addWidget(self.average_transaction_label, 4, 1)
         
         layout.addWidget(metrics_group)
         
         # Order status breakdown
-        order_status_group = QGroupBox("Order Status Breakdown")
+        order_status_group = QGroupBox("📈 Order Status Breakdown")
         order_status_layout = QGridLayout(order_status_group)
         
         self.active_orders_label = QLabel("0")
@@ -197,7 +220,7 @@ class DailySalesReportDialog(QDialog):
         layout.addWidget(order_status_group)
         
         # Report date
-        date_group = QGroupBox("Report Information")
+        date_group = QGroupBox("📅 Report Information")
         date_layout = QGridLayout(date_group)
         
         self.report_date_label = QLabel("")
@@ -206,8 +229,8 @@ class DailySalesReportDialog(QDialog):
         
         layout.addWidget(date_group)
         
-        # Product Summary group (NEW)
-        product_summary_group = QGroupBox("Product Summary")
+        # Product Summary group
+        product_summary_group = QGroupBox("🛍️ Product Summary")
         product_summary_layout = QGridLayout(product_summary_group)
         
         # Create product summary labels
@@ -239,26 +262,6 @@ class DailySalesReportDialog(QDialog):
         product_summary_layout.addWidget(self.top_product_summary_label, 2, 1)
         
         layout.addWidget(product_summary_group)
-        
-        # Order Data Status group (NEW)
-        order_status_info_group = QGroupBox("Order Data Status")
-        order_status_info_layout = QGridLayout(order_status_info_group)
-        
-        # Create order data status label
-        self.order_data_status_label = QLabel("Available")
-        
-        # Style the order data status label
-        order_status_info_font = QFont()
-        order_status_info_font.setPointSize(12)
-        order_status_info_font.setBold(True)
-        
-        self.order_data_status_label.setFont(order_status_info_font)
-        self.order_data_status_label.setStyleSheet("color: #27ae60;")  # Default green for available
-        
-        order_status_info_layout.addWidget(QLabel("Order Data:"), 0, 0)
-        order_status_info_layout.addWidget(self.order_data_status_label, 0, 1)
-        
-        layout.addWidget(order_status_info_group)
         
         layout.addStretch()
         return widget
@@ -568,28 +571,30 @@ class DailySalesReportDialog(QDialog):
     def load_report_data(self):
         """Load and display the report data."""
         try:
-            # Update summary
-            total_sales = self.report_data.get('total_sales', 0)
-            total_orders = self.report_data.get('total_orders', 0)
+            # Update summary with accurate data
             total_transactions = self.report_data.get('total_transactions', 0)
             total_amount = self.report_data.get('total_amount', 0.0)
             average_transaction = self.report_data.get('average_transaction', 0.0)
             report_date = self.report_data.get('date', date.today().isoformat())
             
-            # Order status breakdown
-            order_status_breakdown = self.report_data.get('order_status_breakdown', {})
-            active_orders = order_status_breakdown.get('active', 0)
-            completed_orders = order_status_breakdown.get('completed', 0)
-            cancelled_orders = order_status_breakdown.get('cancelled', 0)
+            # Get data source information
+            data_source = self.report_data.get('data_source', 'Unknown')
+            data_availability = self.report_data.get('data_availability', 'Unknown')
             
-            self.total_sales_label.setText(str(total_sales))
-            self.total_orders_label.setText(str(total_orders))
+            # Update labels with accurate data
+            self.total_sales_label.setText(str(total_transactions))
+            self.total_orders_label.setText(str(total_transactions))  # Same as transactions for completed orders
             self.total_transactions_label.setText(str(total_transactions))
             self.total_amount_label.setText(f"${total_amount:.2f}")
             self.average_transaction_label.setText(f"${average_transaction:.2f}")
             self.report_date_label.setText(report_date)
             
-            # Update order status breakdown
+            # Update order status breakdown (all completed orders)
+            order_status_breakdown = self.report_data.get('order_status_breakdown', {})
+            active_orders = order_status_breakdown.get('active', 0)
+            completed_orders = order_status_breakdown.get('completed', 0)
+            cancelled_orders = order_status_breakdown.get('cancelled', 0)
+            
             self.active_orders_label.setText(str(active_orders))
             self.completed_orders_label.setText(str(completed_orders))
             self.cancelled_orders_label.setText(str(cancelled_orders))
@@ -600,39 +605,49 @@ class DailySalesReportDialog(QDialog):
             self.total_quantity_sold_summary_label.setText(str(product_sales_summary.get('total_quantity_sold', 0)))
             self.top_product_summary_label.setText(product_sales_summary.get('top_product_name', 'None'))
             
-            # Update order data status
-            order_data_status = self.report_data.get('order_data_status', 'Available')
-            self.order_data_status_label.setText(order_data_status)
+            # Update order data status with data source information
+            self.data_source_label.setText(data_source)
+            self.data_availability_label.setText(data_availability)
             
-            # Style the order data status label based on status
-            if 'No order data available' in order_data_status or 'Error' in order_data_status:
-                self.order_data_status_label.setStyleSheet("color: #e74c3c; font-weight: bold;")  # Red for unavailable/error
-            elif 'Available' in order_data_status:
-                self.order_data_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")  # Green for available
+            # Style the data source and availability labels based on data source
+            if 'Completed Orders' in data_source and 'Available' in data_availability:
+                self.data_source_label.setStyleSheet("color: #27ae60; font-weight: bold;")  # Green for completed orders
+                self.data_availability_label.setStyleSheet("color: #27ae60; font-weight: bold;")  # Green for available
+            elif 'Error' in data_source or 'No Data' in data_source:
+                self.data_source_label.setStyleSheet("color: #e74c3c; font-weight: bold;")  # Red for error/no data
+                self.data_availability_label.setStyleSheet("color: #e74c3c; font-weight: bold;")  # Red for error/no data
             else:
-                self.order_data_status_label.setStyleSheet("color: #f39c12; font-weight: bold;")  # Orange for unknown
+                self.data_source_label.setStyleSheet("color: #f39c12; font-weight: bold;")  # Orange for unknown
+                self.data_availability_label.setStyleSheet("color: #f39c12; font-weight: bold;")  # Orange for unknown
             
             # Update product details
             self.update_product_details_summary()
             self.update_product_details_table()
 
-            # Update sale details
-            self.update_sale_details_table()
+            # Update sale details (if available)
+            if 'sale_details' in self.report_data:
+                self.update_sale_details_table()
 
-            # Update employee performance
-            self.update_employee_performance_table()
+            # Update employee performance (if available)
+            if 'employee_performance' in self.report_data:
+                self.update_employee_performance_table()
 
-            # Update customer analytics
-            self.update_customer_analytics()
+            # Update customer analytics (if available)
+            if 'customer_analytics' in self.report_data:
+                self.update_customer_analytics()
 
-            # Update tables
-            self.update_hourly_table()
-            self.update_orders_hourly_table()
-            self.update_combined_hourly_table()
-            self.update_shifts_table()
+            # Update tables (if available)
+            if 'hourly_sales' in self.report_data:
+                self.update_hourly_table()
+            if 'hourly_orders' in self.report_data:
+                self.update_orders_hourly_table()
+            if 'hourly_combined' in self.report_data:
+                self.update_combined_hourly_table()
+            if 'shifts' in self.report_data:
+                self.update_shifts_table()
             
         except Exception as e:
-            logger.error(f"Error loading report data: {e}")
+            logger.error(f"Error loading accurate report data: {e}")
 
     def update_product_details_summary(self):
         """Update the product sales summary labels."""
@@ -1086,8 +1101,8 @@ class DailySalesReportDialog(QDialog):
             # Create shift controller instance
             shift_controller = ShiftController()
             
-            # Get report data for the selected date
-            new_report_data = shift_controller.get_daily_sales_report(report_date)
+            # Get accurate report data for the selected date (using completed orders)
+            new_report_data = shift_controller.get_accurate_sales_report(report_date)
             
             # Update the report data and refresh display
             self.set_report_data(new_report_data)
@@ -1096,14 +1111,14 @@ class DailySalesReportDialog(QDialog):
             self.report_date_label.setText(report_date.strftime('%Y-%m-%d'))
             
             # Show success message
-            self.show_status_message(f"Report loaded for {report_date.strftime('%Y-%m-%d')}")
+            self.show_status_message(f"Accurate report loaded for {report_date.strftime('%Y-%m-%d')} from completed orders")
             
-            logger.info(f"Report generated successfully for date: {report_date}")
+            logger.info(f"Accurate report generated successfully for date: {report_date}")
             
         except Exception as e:
-            logger.error(f"Error generating report for date {report_date}: {e}")
+            logger.error(f"Error generating accurate report for date {report_date}: {e}")
             # Show error message
-            self.show_status_message(f"Error loading report: {str(e)}", is_error=True)
+            self.show_status_message(f"Error loading accurate report: {str(e)}", is_error=True)
             raise
         finally:
             # Restore UI state

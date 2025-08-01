@@ -1056,6 +1056,183 @@ class ShiftController:
             logger.error(f"Error in close_all_open_shifts: {e}")
             return 0
     
+    def get_accurate_sales_report(self, report_date: date = None) -> Dict[str, Any]:
+        """
+        Get accurate sales report for the specified date by reading primarily from completed orders.
+        This method prevents duplicates and provides clean, accurate data to the admin panel.
+        
+        Args:
+            report_date: The date to get the report for (defaults to today)
+            
+        Returns:
+            Dict: Accurate sales report data from completed orders
+        """
+        if report_date is None:
+            report_date = date.today()
+        
+        try:
+            # Get start and end of the day
+            start_datetime = datetime.combine(report_date, time.min)
+            end_datetime = datetime.combine(report_date, time.max)
+            
+            # Primary data source: Completed orders (excluding orders created from sales)
+            try:
+                from controllers.order_controller import OrderController
+                order_controller = OrderController()
+                daily_orders = order_controller.get_all_orders_for_date(report_date)
+                
+                # Filter to only completed orders and exclude orders created from sales
+                completed_orders = [
+                    order for order in daily_orders 
+                    if order.status == OrderStatus.COMPLETED 
+                    and not order.order_number.startswith("SALE-")
+                ]
+            except Exception as e:
+                logger.warning(f"Error querying orders for accurate report: {e}")
+                completed_orders = []
+            
+            # Calculate totals from completed orders
+            total_transactions = len(completed_orders)
+            total_amount = sum(order.total_amount for order in completed_orders)
+            average_transaction = total_amount / total_transactions if total_transactions > 0 else 0.0
+            
+            # Get product details from completed orders
+            product_details = []
+            total_quantity_sold = 0
+            top_product_name = "None"
+            top_product_quantity = 0
+            
+            if completed_orders:
+                # Query product details from completed orders
+                try:
+                    from models.order import order_products
+                    product_details_query = self.session.query(
+                        Product.name.label('product_name'),
+                        Category.name.label('category_name'),
+                        func.sum(order_products.c.quantity).label('quantity_sold'),
+                        func.avg(order_products.c.price_at_order).label('avg_unit_price'),
+                        func.sum(order_products.c.quantity * order_products.c.price_at_order).label('total_amount'),
+                        func.count(order_products.c.order_id.distinct()).label('order_count')
+                    ).join(
+                        order_products, Product.id == order_products.c.product_id
+                    ).join(
+                        Order, order_products.c.order_id == Order.id
+                    ).join(
+                        Category, Product.category_id == Category.id
+                    ).filter(
+                        and_(
+                            Order.created_at >= start_datetime,
+                            Order.created_at <= end_datetime,
+                            Order.status == OrderStatus.COMPLETED,
+                            ~Order.order_number.like('SALE-%')  # Exclude orders created from sales
+                        )
+                    ).group_by(
+                        Product.id, Product.name, Category.name
+                    ).order_by(
+                        func.sum(order_products.c.quantity).desc()
+                    ).all()
+                    
+                    # Process product details
+                    for row in product_details_query:
+                        try:
+                            product_name = row.product_name or 'Unknown'
+                            category_name = row.category_name or 'Unknown'
+                            quantity_sold = int(row.quantity_sold) if row.quantity_sold else 0
+                            avg_unit_price = float(row.avg_unit_price) if row.avg_unit_price else 0.0
+                            total_amount = float(row.total_amount) if row.total_amount else 0.0
+                            order_count = int(row.order_count) if row.order_count else 0
+                            
+                            product_detail = {
+                                'product_name': product_name,
+                                'category': category_name,
+                                'quantity_sold': quantity_sold,
+                                'unit_price': avg_unit_price,
+                                'total_amount': total_amount,
+                                'sales_count': order_count,
+                                'average_per_sale': total_amount / order_count if order_count > 0 else 0.0
+                            }
+                            
+                            product_details.append(product_detail)
+                            total_quantity_sold += quantity_sold
+                            
+                            # Track top selling product
+                            if quantity_sold > top_product_quantity:
+                                top_product_quantity = quantity_sold
+                                top_product_name = product_name
+                                
+                        except Exception as e:
+                            logger.error(f"Error processing product detail row: {e}")
+                            continue
+                            
+                except Exception as e:
+                    logger.error(f"Error in product details query: {e}")
+            
+            # Create product sales summary
+            product_sales_summary = {
+                'total_products_sold': len(product_details),
+                'total_quantity_sold': total_quantity_sold,
+                'top_product_name': top_product_name,
+                'top_product_quantity': top_product_quantity
+            }
+            
+            # Determine data source status
+            if completed_orders:
+                data_source_status = "Completed Orders"
+                data_availability = "Available"
+            else:
+                data_source_status = "No Data"
+                data_availability = "No completed orders available for this date"
+            
+            # Compile the final report
+            report_data = {
+                'date': report_date.isoformat(),
+                'data_source': data_source_status,
+                'data_availability': data_availability,
+                
+                # Summary metrics
+                'total_transactions': total_transactions,
+                'total_amount': total_amount,
+                'average_transaction': average_transaction,
+                
+                # Product details
+                'product_sales_summary': product_sales_summary,
+                'product_details': product_details,
+                
+                # Order status (for compatibility)
+                'order_status_breakdown': {
+                    'completed': total_transactions,
+                    'active': 0,
+                    'cancelled': 0
+                }
+            }
+            
+            logger.info(f"Accurate sales report generated for {report_date}: {total_transactions} transactions, ${total_amount:.2f} total")
+            return report_data
+            
+        except Exception as e:
+            logger.error(f"Error generating accurate sales report for {report_date}: {e}")
+            # Return empty report structure
+            return {
+                'date': report_date.isoformat() if report_date else date.today().isoformat(),
+                'data_source': 'Error',
+                'data_availability': f'Error generating report: {str(e)}',
+                'total_transactions': 0,
+                'total_amount': 0.0,
+                'average_transaction': 0.0,
+                'product_sales_summary': {
+                    'total_products_sold': 0,
+                    'total_quantity_sold': 0,
+                    'top_product_name': 'None',
+                    'top_product_quantity': 0
+                },
+                'product_details': [],
+                'order_status_breakdown': {
+                    'completed': 0,
+                    'active': 0,
+                    'cancelled': 0
+                }
+            }
+    
     def __del__(self):
         """Clean up the session."""
         if hasattr(self, 'session'):
