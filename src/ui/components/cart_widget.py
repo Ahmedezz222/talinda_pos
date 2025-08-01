@@ -219,11 +219,11 @@ class CartWidget(QWidget):
         Args:
             product: The product to add to the cart
         """
-        if self.sale_controller.add_to_cart(product):
-            if product.id in self.cart_items:
-                self.update_item_widget(product.id)
-            else:
+        if self.sale_controller.add_to_cart(product, 1):
+            if product.id not in self.cart_items:
                 self.create_item_widget(product)
+            else:
+                self.update_item_widget(product.id)
             self.update_totals()
     
     def create_item_widget(self, product) -> None:
@@ -364,7 +364,15 @@ class CartWidget(QWidget):
         if product_id in self.sale_controller.cart:
             item = self.sale_controller.cart[product_id]
             new_qty = item.quantity + change
-            if new_qty > 0 and self.sale_controller.update_quantity(product_id, new_qty):
+            
+            # Validate quantity
+            if new_qty <= 0:
+                # Remove item if quantity would be 0 or negative
+                self.remove_item(product_id)
+                return
+            
+            # Update quantity if valid
+            if self.sale_controller.update_quantity(product_id, new_qty):
                 self.update_item_widget(product_id)
                 self.update_totals()
     

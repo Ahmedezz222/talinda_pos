@@ -531,6 +531,13 @@ class ModernPOSWidget(QWidget):
         for product in products:
             try:
                 card = ProductCard(product)
+                
+                # Disconnect any existing signals to prevent duplicates
+                try:
+                    card.product_selected.disconnect()
+                except (TypeError, RuntimeError):
+                    pass  # No connections to disconnect
+                
                 # Connect the product_selected signal to the cart widget
                 card.product_selected.connect(self.cart_widget.add_item)
                 self.products_layout.addWidget(card, row, col)

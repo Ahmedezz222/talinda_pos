@@ -10,7 +10,7 @@ from models.sale import Sale, sale_products
 from models.product import Product
 from models.user import User
 from models.order import Order, OrderStatus, order_products
-from sqlalchemy import update
+from sqlalchemy import update, and_
 import logging
 
 # Set up logging
@@ -68,13 +68,32 @@ class SaleController:
         Returns:
             bool: True if added successfully
         """
-        product_id = int(getattr(product, 'id', 0))
-        if product_id in self.cart:
-            self.cart[product_id].quantity += quantity
-        else:
-            self.cart[product_id] = CartItem(product, quantity)
-        logger.debug(f"Added {quantity} of {product.name} to cart")
-        return True
+        try:
+            product_id = int(getattr(product, 'id', 0))
+            if product_id <= 0:
+                logger.error(f"Invalid product ID: {product_id}")
+                return False
+            
+            # Validate quantity
+            if quantity <= 0:
+                logger.error(f"Invalid quantity: {quantity}")
+                return False
+            
+            if product_id in self.cart:
+                # Update existing item quantity instead of adding
+                current_item = self.cart[product_id]
+                current_item.quantity = quantity  # Replace quantity instead of adding
+                logger.debug(f"Updated quantity of {product.name} to {quantity}")
+            else:
+                # Create new cart item
+                self.cart[product_id] = CartItem(product, quantity)
+                logger.debug(f"Added {quantity} of {product.name} to cart")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error adding product to cart: {e}")
+            return False
     
     def remove_from_cart(self, product_id: int) -> None:
         """
@@ -305,6 +324,44 @@ class SaleController:
         self.loaded_order = None  # Clear loaded order reference
         logger.debug("Cart cleared")
     
+    def check_duplicate_sale(self, user: User, total_amount: float) -> Optional[Sale]:
+        """
+        Check if a similar sale already exists to prevent duplicates.
+        
+        Args:
+            user: The user creating the sale
+            total_amount: The total amount of the sale
+            
+        Returns:
+            Optional[Sale]: Existing sale if found, None otherwise
+        """
+        try:
+            from datetime import datetime, timedelta
+            
+            # Look for sales created in the last 2 minutes by the same user with similar amount
+            recent_time = datetime.now() - timedelta(minutes=2)
+            
+            # Check for sales with similar amount (±$0.01 tolerance)
+            tolerance = 0.01
+            existing_sale = self.session.query(Sale).filter(
+                and_(
+                    Sale.user_id == user.id,
+                    Sale.timestamp >= recent_time,
+                    Sale.total_amount >= total_amount - tolerance,
+                    Sale.total_amount <= total_amount + tolerance
+                )
+            ).first()
+            
+            if existing_sale:
+                logger.info(f"Found potential duplicate sale: {existing_sale.id}")
+                return existing_sale
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error checking for duplicate sale: {e}")
+            return None
+
     def process_sale(self, payment_method: str = "cash") -> Optional[Sale]:
         """
         Process the current cart as a sale and create a completed order.
@@ -324,8 +381,16 @@ class SaleController:
             return None
         
         try:
+            # Calculate total amount
+            total_amount = self.get_cart_total_with_tax()
+            
+            # Check for duplicate sales first
+            duplicate_sale = self.check_duplicate_sale(self.current_user, total_amount)
+            if duplicate_sale:
+                logger.warning(f"Duplicate sale detected, returning existing sale: {duplicate_sale.id}")
+                return duplicate_sale
+            
             # Create the sale record
-            total_amount = self.get_cart_total_with_tax()  # Use total with tax
             sale = Sale(
                 total_amount=total_amount,
                 user_id=self.current_user.id

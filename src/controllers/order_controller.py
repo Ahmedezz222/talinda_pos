@@ -23,6 +23,53 @@ class OrderController:
         """Initialize the order controller."""
         self.session = get_fresh_session()
     
+    def check_duplicate_order(self, user: User, customer_name: str = None, notes: str = None) -> Optional[Order]:
+        """
+        Check if a similar order already exists to prevent duplicates.
+        
+        Args:
+            user: The user creating the order
+            customer_name: Optional customer name for the order
+            notes: Optional notes for the order
+            
+        Returns:
+            Optional[Order]: Existing order if found, None otherwise
+        """
+        try:
+            # Check for recent orders by the same user with similar details
+            from datetime import datetime, timedelta
+            
+            # Look for orders created in the last 5 minutes by the same user
+            recent_time = datetime.now() - timedelta(minutes=5)
+            
+            query = self.session.query(Order).filter(
+                and_(
+                    Order.user_id == user.id,
+                    Order.created_at >= recent_time,
+                    Order.status == OrderStatus.ACTIVE
+                )
+            )
+            
+            # If customer name is provided, also check for that
+            if customer_name:
+                query = query.filter(Order.customer_name == customer_name)
+            
+            # If notes are provided, also check for that
+            if notes:
+                query = query.filter(Order.notes == notes)
+            
+            existing_order = query.first()
+            
+            if existing_order:
+                logger.info(f"Found potential duplicate order: {existing_order.order_number}")
+                return existing_order
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error checking for duplicate order: {e}")
+            return None
+
     def create_order(self, user: User, customer_name: str = None, notes: str = None) -> Order:
         """
         Create a new order.
@@ -36,6 +83,12 @@ class OrderController:
             Order: The created order
         """
         try:
+            # Check for duplicate orders first
+            duplicate_order = self.check_duplicate_order(user, customer_name, notes)
+            if duplicate_order:
+                logger.warning(f"Duplicate order detected, returning existing order: {duplicate_order.order_number}")
+                return duplicate_order
+            
             # Generate unique order number
             order_number = self._generate_order_number()
             
