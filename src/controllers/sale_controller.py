@@ -360,8 +360,50 @@ class SaleController:
                         logger.warning(f"Failed to complete loaded order {self.loaded_order.order_number}")
                 except Exception as e:
                     logger.error(f"Error completing loaded order: {e}")
-            # Note: We no longer create a completed order from sales to avoid duplication in sales reports
-            # The sale record itself is sufficient for sales reporting
+            else:
+                # Only create a new completed order if this is NOT from a loaded order
+                # (to avoid duplication when completing existing orders)
+                try:
+                    from controllers.order_controller import OrderController
+                    order_controller = OrderController()
+                    
+                    # Create a new order with completed status
+                    order = Order(
+                        order_number=f"SALE-{sale.id:06d}",
+                        customer_name="Walk-in Customer",
+                        user_id=self.current_user.id,
+                        status=OrderStatus.COMPLETED,
+                        subtotal=self.get_cart_subtotal(),
+                        discount_amount=self.get_cart_discount_total(),
+                        tax_amount=self.get_cart_tax_total(),
+                        total_amount=total_amount,
+                        created_at=sale.timestamp,
+                        completed_at=sale.timestamp
+                    )
+                    
+                    order_controller.session.add(order)
+                    order_controller.session.flush()  # Get the order ID
+                    
+                    # Add order items
+                    for product_id, cart_item in self.cart.items():
+                        order_controller.session.execute(
+                            order_products.insert().values(
+                                order_id=order.id,
+                                product_id=product_id,
+                                quantity=cart_item.quantity,
+                                price_at_order=cart_item.price,
+                                notes=f"Sale #{sale.id}"
+                            )
+                        )
+                    
+                    if safe_commit(order_controller.session):
+                        logger.info(f"Created completed order {order.order_number} from sale {sale.id}")
+                    else:
+                        logger.warning(f"Failed to create completed order from sale {sale.id}")
+                        
+                except Exception as e:
+                    logger.error(f"Error creating completed order from sale: {e}")
+                    # Don't fail the sale if order creation fails
             
             # Commit the transaction
             if safe_commit(self.session):

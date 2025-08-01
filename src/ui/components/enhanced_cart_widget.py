@@ -739,15 +739,19 @@ class EnhancedCartWidget(QWidget):
             logger.error(f"Error refreshing order management widget: {str(e)}")
     
     def create_order(self) -> None:
-        """Save a new order from cart items."""
+        """Save a new order from cart items or checkout completed orders."""
         if not self.sale_controller.cart:
             QMessageBox.warning(self, "Empty Cart", "Cart is empty. Please add items before saving an order.")
             return
         
         # Check if we're updating an existing order
         if self.loaded_order:
-            # Update existing order
-            self.update_existing_order()
+            # If it's a completed order, process checkout instead of updating
+            if self.loaded_order.status.value == "completed":
+                self.checkout()
+            else:
+                # Update existing active order
+                self.update_existing_order()
         else:
             # Create new order
             self.create_new_order()
@@ -858,41 +862,78 @@ class EnhancedCartWidget(QWidget):
         # Refresh cart display
         self.refresh_cart_display()
         
-        # Show confirmation
-        QMessageBox.information(self, "Order Loaded", f"Order {order.order_number} loaded into cart!\nCustomer: {self.loaded_customer_name or 'No name'}")
+        # Show confirmation with appropriate message for completed orders
+        if order.status.value == "completed":
+            QMessageBox.information(self, "Order Loaded", f"Completed order {order.order_number} loaded into cart!\nCustomer: {self.loaded_customer_name or 'No name'}\n\nClick 'Checkout' to process the sale.")
+        else:
+            QMessageBox.information(self, "Order Loaded", f"Order {order.order_number} loaded into cart!\nCustomer: {self.loaded_customer_name or 'No name'}")
     
     def update_cart_header(self) -> None:
         """Update the cart header to show loaded order information."""
         if self.loaded_order and self.loaded_customer_name:
-            self.cart_header.setText(f"📋 Order {self.loaded_order.order_number} - {self.loaded_customer_name}")
-            self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #27ae60; padding: 5px;")
-            # Update button text to indicate we're updating an existing order
-            self.create_order_btn.setText("Update Order")
-            self.create_order_btn.setStyleSheet("""
-                background-color: #3498db;
-                color: white;
-                padding: 12px;
-                border: none;
-                border-radius: 5px;
-                font-size: 14px;
-                font-weight: bold;
-                min-height: 45px;
-            """)
+            status_text = " (Completed)" if self.loaded_order.status.value == "completed" else ""
+            self.cart_header.setText(f"📋 Order {self.loaded_order.order_number} - {self.loaded_customer_name}{status_text}")
+            
+            if self.loaded_order.status.value == "completed":
+                self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #f39c12; padding: 5px;")
+                # For completed orders, show "Checkout" instead of "Update Order"
+                self.create_order_btn.setText("Checkout")
+                self.create_order_btn.setStyleSheet("""
+                    background-color: #27ae60;
+                    color: white;
+                    padding: 12px;
+                    border: none;
+                    border-radius: 5px;
+                    font-size: 14px;
+                    font-weight: bold;
+                    min-height: 45px;
+                """)
+            else:
+                self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #27ae60; padding: 5px;")
+                # Update button text to indicate we're updating an existing order
+                self.create_order_btn.setText("Update Order")
+                self.create_order_btn.setStyleSheet("""
+                    background-color: #3498db;
+                    color: white;
+                    padding: 12px;
+                    border: none;
+                    border-radius: 5px;
+                    font-size: 14px;
+                    font-weight: bold;
+                    min-height: 45px;
+                """)
         elif self.loaded_order:
-            self.cart_header.setText(f"📋 Order {self.loaded_order.order_number} - No Name")
-            self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #f39c12; padding: 5px;")
-            # Update button text to indicate we're updating an existing order
-            self.create_order_btn.setText("Update Order")
-            self.create_order_btn.setStyleSheet("""
-                background-color: #3498db;
-                color: white;
-                padding: 12px;
-                border: none;
-                border-radius: 5px;
-                font-size: 14px;
-                font-weight: bold;
-                min-height: 45px;
-            """)
+            status_text = " (Completed)" if self.loaded_order.status.value == "completed" else ""
+            self.cart_header.setText(f"📋 Order {self.loaded_order.order_number} - No Name{status_text}")
+            
+            if self.loaded_order.status.value == "completed":
+                self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #f39c12; padding: 5px;")
+                # For completed orders, show "Checkout" instead of "Update Order"
+                self.create_order_btn.setText("Checkout")
+                self.create_order_btn.setStyleSheet("""
+                    background-color: #27ae60;
+                    color: white;
+                    padding: 12px;
+                    border: none;
+                    border-radius: 5px;
+                    font-size: 14px;
+                    font-weight: bold;
+                    min-height: 45px;
+                """)
+            else:
+                self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #f39c12; padding: 5px;")
+                # Update button text to indicate we're updating an existing order
+                self.create_order_btn.setText("Update Order")
+                self.create_order_btn.setStyleSheet("""
+                    background-color: #3498db;
+                    color: white;
+                    padding: 12px;
+                    border: none;
+                    border-radius: 5px;
+                    font-size: 14px;
+                    font-weight: bold;
+                    min-height: 45px;
+                """)
         else:
             self.cart_header.setText("Shopping Cart")
             self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50; padding: 5px;")

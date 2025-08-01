@@ -53,6 +53,10 @@ class OrderCard(QFrame):
         # Enable mouse tracking for hover effects
         self.setMouseTracking(True)
         
+        # Add tooltip for completed orders
+        if self.order.status == OrderStatus.COMPLETED:
+            self.setToolTip("Click to load this completed order into cart for checkout")
+        
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
@@ -181,20 +185,6 @@ class OrderCard(QFrame):
             edit_btn.clicked.connect(self.edit_order)
             btn_layout.addWidget(edit_btn)
             
-            complete_btn = QPushButton("Complete")
-            complete_btn.setStyleSheet("""
-                background-color: #27ae60;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 12px;
-                font-size: 12px;
-                font-weight: bold;
-                min-height: 30px;
-            """)
-            complete_btn.clicked.connect(self.complete_order)
-            btn_layout.addWidget(complete_btn)
-            
             cancel_btn = QPushButton("Cancel")
             cancel_btn.setStyleSheet("""
                 background-color: #e74c3c;
@@ -210,6 +200,17 @@ class OrderCard(QFrame):
             btn_layout.addWidget(cancel_btn)
             
             layout.addLayout(btn_layout)
+        elif self.order.status == OrderStatus.COMPLETED:
+            # Add a note for completed orders that they can be clicked to load into cart
+            note_label = QLabel("💡 Click to load into cart for checkout")
+            note_label.setStyleSheet("""
+                color: #f39c12;
+                font-style: italic;
+                font-size: 11px;
+                margin-top: 5px;
+                text-align: center;
+            """)
+            layout.addWidget(note_label)
     
     def _get_status_style(self):
         """Get CSS style for status badge."""
@@ -256,8 +257,8 @@ class OrderCard(QFrame):
     def mousePressEvent(self, event):
         """Handle mouse click events."""
         if event.button() == Qt.LeftButton:
-            # Only emit signal for active orders
-            if self.order.status == OrderStatus.ACTIVE:
+            # Allow clicking on active and completed orders to load into cart
+            if self.order.status in [OrderStatus.ACTIVE, OrderStatus.COMPLETED]:
                 self.order_clicked.emit(self.order)
         try:
             super().mousePressEvent(event)

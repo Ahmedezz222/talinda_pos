@@ -249,6 +249,10 @@ class ShiftController:
                 logger.warning(f"Error querying orders for daily report: {e}")
                 daily_orders = []
             
+            # Filter out orders that were created from sales (to avoid duplication)
+            # Orders created from sales have order numbers starting with "SALE-"
+            daily_orders = [order for order in daily_orders if not order.order_number.startswith("SALE-")]
+            
             # Get completed orders (these are orders that were created and then completed)
             completed_orders_list = [order for order in daily_orders if order.status == OrderStatus.COMPLETED]
             
@@ -328,7 +332,7 @@ class ShiftController:
                 logger.error(f"Error in product details query: {e}")
                 product_details_query = []
             
-            # Query to get product details from completed orders
+            # Query to get product details from completed orders (excluding orders created from sales)
             try:
                 from models.order import order_products
                 order_product_details_query = self.session.query(
@@ -348,7 +352,8 @@ class ShiftController:
                     and_(
                         Order.created_at >= start_datetime,
                         Order.created_at <= end_datetime,
-                        Order.status == OrderStatus.COMPLETED
+                        Order.status == OrderStatus.COMPLETED,
+                        ~Order.order_number.like('SALE-%')  # Exclude orders created from sales
                     )
                 ).group_by(
                     Product.id, Product.name, Category.name
@@ -386,13 +391,13 @@ class ShiftController:
                                 'quantity_sold': 0,
                                 'total_amount': 0.0,
                                 'sales_count': 0,
-                                'total_quantity': 0.0  # For weighted average
+                                'weighted_price_sum': 0.0  # For weighted average calculation
                             }
                         
                         combined_product_data[product_name]['quantity_sold'] += quantity_sold
                         combined_product_data[product_name]['total_amount'] += total_amount
                         combined_product_data[product_name]['sales_count'] += sales_count
-                        combined_product_data[product_name]['total_quantity'] += quantity_sold * avg_unit_price
+                        combined_product_data[product_name]['weighted_price_sum'] += quantity_sold * avg_unit_price
                         
                     except Exception as e:
                         logger.error(f"Error processing sales product detail row: {e}")
@@ -418,13 +423,13 @@ class ShiftController:
                                 'quantity_sold': 0,
                                 'total_amount': 0.0,
                                 'sales_count': 0,
-                                'total_quantity': 0.0  # For weighted average
+                                'weighted_price_sum': 0.0  # For weighted average calculation
                             }
                         
                         combined_product_data[product_name]['quantity_sold'] += quantity_sold
                         combined_product_data[product_name]['total_amount'] += total_amount
                         combined_product_data[product_name]['sales_count'] += sales_count
-                        combined_product_data[product_name]['total_quantity'] += quantity_sold * avg_unit_price
+                        combined_product_data[product_name]['weighted_price_sum'] += quantity_sold * avg_unit_price
                         
                     except Exception as e:
                         logger.error(f"Error processing order product detail row: {e}")
@@ -439,10 +444,10 @@ class ShiftController:
                         quantity_sold = product_data['quantity_sold']
                         total_amount = product_data['total_amount']
                         sales_count = product_data['sales_count']
-                        total_quantity = product_data['total_quantity']
+                        weighted_price_sum = product_data['weighted_price_sum']
                         
                         # Calculate weighted average unit price
-                        avg_unit_price = total_quantity / quantity_sold if quantity_sold > 0 else 0.0
+                        avg_unit_price = weighted_price_sum / quantity_sold if quantity_sold > 0 else 0.0
                         average_per_sale = total_amount / sales_count if sales_count > 0 else 0.0
                         
                         product_detail = {
@@ -535,7 +540,7 @@ class ShiftController:
                 logger.error(f"Error in transaction summary query: {e}")
                 transaction_summary_query = []
             
-            # Get detailed completed order information with product breakdown
+            # Get detailed completed order information with product breakdown (excluding orders created from sales)
             try:
                 from models.order import order_products
                 order_details_query = self.session.query(
@@ -564,7 +569,8 @@ class ShiftController:
                     and_(
                         Order.created_at >= start_datetime,
                         Order.created_at <= end_datetime,
-                        Order.status == OrderStatus.COMPLETED
+                        Order.status == OrderStatus.COMPLETED,
+                        ~Order.order_number.like('SALE-%')  # Exclude orders created from sales
                     )
                 ).order_by(
                     Order.completed_at.desc(), Order.id, Product.name
