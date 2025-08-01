@@ -35,12 +35,16 @@ class CartItem:
     def discount_total(self) -> float:
         """Calculate total discount for this item."""
         percentage_discount = self.subtotal * (self.discount_percentage / 100)
-        return percentage_discount + self.discount_amount
+        total_discount = percentage_discount + self.discount_amount
+        # Ensure discount doesn't exceed subtotal
+        return min(total_discount, self.subtotal)
     
     @property
     def total(self) -> float:
         """Calculate total price for this item (after discount)."""
-        return self.subtotal - self.discount_total
+        total = self.subtotal - self.discount_total
+        # Ensure total is never negative
+        return max(0.0, total)
 
 class SaleController:
     """Controller for handling sale operations."""
@@ -149,12 +153,15 @@ class SaleController:
         # Item-level discounts
         item_discounts = sum(item.discount_total for item in self.cart.values())
         
-        # Cart-level discounts
+        # Cart-level discounts (applied to subtotal after item discounts)
         cart_subtotal = self.get_cart_subtotal()
-        cart_percentage_discount = cart_subtotal * (self.cart_discount_percentage / 100)
+        subtotal_after_item_discounts = max(0.0, cart_subtotal - item_discounts)
+        cart_percentage_discount = subtotal_after_item_discounts * (self.cart_discount_percentage / 100)
         cart_total_discount = cart_percentage_discount + self.cart_discount_amount
         
-        return item_discounts + cart_total_discount
+        total_discount = item_discounts + cart_total_discount
+        # Ensure discount doesn't exceed subtotal
+        return min(total_discount, cart_subtotal)
     
     def get_cart_total(self) -> float:
         """
@@ -163,7 +170,9 @@ class SaleController:
         Returns:
             float: Total price
         """
-        return self.get_cart_subtotal() - self.get_cart_discount_total()
+        total = self.get_cart_subtotal() - self.get_cart_discount_total()
+        # Ensure total is never negative
+        return max(0.0, total)
 
     def get_cart_tax_total(self) -> float:
         """
@@ -182,13 +191,18 @@ class SaleController:
                     item_tax = item_total * (tax_rate / 100.0)
                     total_tax += item_tax
             
-            # Apply cart-level discount to tax calculation
+            # Apply cart-level discount proportionally to tax
             if self.cart_discount_percentage > 0 or self.cart_discount_amount > 0:
-                # Recalculate tax based on final cart total
                 cart_subtotal = self.get_cart_subtotal()
-                cart_discount = self.get_cart_discount_total()
-                discount_ratio = cart_discount / cart_subtotal if cart_subtotal > 0 else 0
-                total_tax *= (1 - discount_ratio)
+                if cart_subtotal > 0:
+                    # Calculate the discount ratio based on the subtotal after item discounts
+                    cart_discount = self.get_cart_discount_total()
+                    # Only apply the cart-level discount portion to tax
+                    item_discounts = sum(item.discount_total for item in self.cart.values())
+                    cart_level_discount = cart_discount - item_discounts
+                    if cart_level_discount > 0 and cart_subtotal > 0:
+                        discount_ratio = cart_level_discount / cart_subtotal
+                        total_tax *= (1 - discount_ratio)
             
             return total_tax
         except Exception as e:
@@ -202,7 +216,9 @@ class SaleController:
         Returns:
             float: Total price with tax
         """
-        return self.get_cart_total() + self.get_cart_tax_total()
+        total = self.get_cart_total() + self.get_cart_tax_total()
+        # Ensure total is never negative
+        return max(0.0, total)
 
     def load_order_to_cart(self, order) -> bool:
         """
@@ -344,9 +360,8 @@ class SaleController:
                         logger.warning(f"Failed to complete loaded order {self.loaded_order.order_number}")
                 except Exception as e:
                     logger.error(f"Error completing loaded order: {e}")
-            
-            # Create a completed order for the sale
-            self._create_completed_order_from_sale(sale)
+            # Note: We no longer create a completed order from sales to avoid duplication in sales reports
+            # The sale record itself is sufficient for sales reporting
             
             # Commit the transaction
             if safe_commit(self.session):
@@ -363,60 +378,7 @@ class SaleController:
             self.session.rollback()
             return None
     
-    def _create_completed_order_from_sale(self, sale: Sale) -> None:
-        """
-        Create a completed order from a sale for order history tracking.
-        
-        Args:
-            sale: The sale object to create order from
-        """
-        try:
-            from controllers.order_controller import OrderController
-            from models.order import Order, OrderStatus
-            
-            # Create order controller
-            order_controller = OrderController()
-            
-            # Generate order number based on sale
-            order_number = f"SALE-{sale.id:06d}"
-            
-            # Create the order
-            order = Order(
-                order_number=order_number,
-                customer_name=f"Sale #{sale.id}",
-                user_id=sale.user_id,
-                status=OrderStatus.COMPLETED,
-                created_at=sale.timestamp,
-                completed_at=sale.timestamp,
-                subtotal=sale.total_amount,
-                total_amount=sale.total_amount,
-                notes=f"Completed sale - Payment processed"
-            )
-            
-            # Add order to session
-            self.session.add(order)
-            self.session.flush()  # Get the order ID
-            
-            # Add order items from sale
-            for product_id, cart_item in self.cart.items():
-                # Add to order_products table
-                from models.order import order_products
-                self.session.execute(
-                    order_products.insert().values(
-                        order_id=order.id,
-                        product_id=product_id,
-                        quantity=cart_item.quantity,
-                        price_at_order=cart_item.price,
-                        notes=None
-                    )
-                )
-            
-            logger.info(f"Created completed order {order_number} from sale {sale.id}")
-            
-        except Exception as e:
-            logger.error(f"Error creating completed order from sale: {e}")
-            # Don't fail the sale if order creation fails
-            pass
+
     
     def get_sales_history(self, limit: int = 50) -> List[Sale]:
         """

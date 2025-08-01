@@ -480,7 +480,6 @@ class ModernPOSWidget(QWidget):
                 text-align: center;
                 padding: 12px 8px;
                 margin: 3px;
-                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
                 letter-spacing: 0.5px;
             }}
             QPushButton:hover {{
@@ -488,7 +487,6 @@ class ModernPOSWidget(QWidget):
                     stop:0 {self.lighten_color(bg_color)}, stop:1 {bg_color});
                 border: 3px solid white;
                 font-weight: 700;
-                text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.4);
             }}
             QPushButton:pressed {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -886,14 +884,21 @@ class ModernAdminPanelWidget(QWidget):
     def show_daily_sales_report(self):
         """Show the simple daily sales report dialog."""
         try:
+            # Check if dialog is already open
+            if hasattr(self, '_sales_report_dialog') and self._sales_report_dialog and self._sales_report_dialog.isVisible():
+                self._sales_report_dialog.raise_()
+                self._sales_report_dialog.activateWindow()
+                return
+                
             from controllers.shift_controller import ShiftController
             from ui.components.simple_sale_report_dialog import SimpleSaleReportDialog
             
             shift_controller = ShiftController()
             report_data = shift_controller.get_daily_sales_report()
             
-            dialog = SimpleSaleReportDialog(self, report_data)
-            dialog.exec_()
+            self._sales_report_dialog = SimpleSaleReportDialog(self, report_data)
+            self._sales_report_dialog.finished.connect(lambda: setattr(self, '_sales_report_dialog', None))
+            self._sales_report_dialog.exec_()
             
         except Exception as e:
             self.logger.error(f"Error showing daily sales report: {e}")
@@ -901,15 +906,22 @@ class ModernAdminPanelWidget(QWidget):
     def show_shift_reports(self):
         """Show shift reports dialog."""
         try:
+            # Check if dialog is already open
+            if hasattr(self, '_shift_report_dialog') and self._shift_report_dialog and self._shift_report_dialog.isVisible():
+                self._shift_report_dialog.raise_()
+                self._shift_report_dialog.activateWindow()
+                return
+                
             from controllers.shift_controller import ShiftController
-            from ui.components.simple_sale_report_dialog import SimpleSaleReportDialog
+            from ui.components.daily_sales_report_dialog import DailySalesReportDialog
             
             shift_controller = ShiftController()
-            # For now, show the same dialog but could be enhanced for shift-specific reports
+            # Use the comprehensive daily sales report dialog for shift reports
             report_data = shift_controller.get_daily_sales_report()
             
-            dialog = SimpleSaleReportDialog(self, report_data)
-            dialog.exec_()
+            self._shift_report_dialog = DailySalesReportDialog(self, report_data)
+            self._shift_report_dialog.finished.connect(lambda: setattr(self, '_shift_report_dialog', None))
+            self._shift_report_dialog.exec_()
             
         except Exception as e:
             self.logger.error(f"Error showing shift reports: {e}")

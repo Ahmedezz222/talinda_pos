@@ -395,12 +395,10 @@ class ModernLoginDialog(QDialog):
                 padding: 8px 12px;
                 font-size: 14px;
                 background-color: white;
-                transition: border-color 0.2s ease;
             }
             QLineEdit:focus {
                 border-color: #1976d2;
                 background-color: #f8f9fa;
-                box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
             }
             QLineEdit:disabled {
                 background-color: #f5f5f5;
@@ -916,10 +914,25 @@ class ApplicationManager:
             
             any_open_shift = shift_controller.get_any_open_shift()
             if any_open_shift and any_open_shift.user_id != user.id:
+                # Get the username safely to avoid session binding issues
+                try:
+                    # Use a fresh session to get the user information
+                    from database.db_config import get_fresh_session
+                    from models.user import User
+                    session = get_fresh_session()
+                    try:
+                        shift_user = session.query(User).filter_by(id=any_open_shift.user_id).first()
+                        username = shift_user.username if shift_user else "Unknown"
+                    finally:
+                        session.close()
+                except Exception as e:
+                    self.logger.warning(f"Error getting shift user info: {e}")
+                    username = "Unknown"
+                
                 self.show_message_once(
                     "error", 
                     "Shift Already Open", 
-                    f"There's already an open shift by {any_open_shift.user.username}. "
+                    f"There's already an open shift by {username}. "
                     "Please close that shift before opening a new one."
                 )
                 return None

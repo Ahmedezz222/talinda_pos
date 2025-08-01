@@ -152,7 +152,6 @@ class ProductCard(QFrame):
                 border-color: #007bff;
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #ffffff, stop:1 #e3f2fd);
-                transform: translateY(-2px);
             }
             QFrame#imageContainer {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,

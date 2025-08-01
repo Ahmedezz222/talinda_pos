@@ -127,7 +127,6 @@ class ModernProductCard(QFrame):
             QFrame#productCard:hover {
                 border-color: #007bff;
                 background-color: #f8f9fa;
-                transform: translateY(-2px);
             }
             QLabel#productName {
                 font-size: 14px;

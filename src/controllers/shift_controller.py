@@ -54,7 +54,13 @@ class ShiftController:
                 # Check if there's any open shift in the system (only one shift can be open at a time)
                 any_open_shift = check_session.query(Shift).filter_by(status=ShiftStatus.OPEN).first()
                 if any_open_shift:
-                    logger.warning(f"There's already an open shift by user {any_open_shift.user.username}")
+                    # Get username safely to avoid session binding issues
+                    try:
+                        username = any_open_shift.user.username if any_open_shift.user else "Unknown"
+                    except Exception as e:
+                        logger.warning(f"Error accessing user for shift {any_open_shift.id}: {e}")
+                        username = "Unknown"
+                    logger.warning(f"There's already an open shift by user {username}")
                     return None
             finally:
                 check_session.close()
@@ -208,14 +214,14 @@ class ShiftController:
     def get_daily_sales_report(self, report_date: date = None) -> Dict[str, Any]:
         """
         Get daily sales report for the specified date (defaults to today).
-        Includes both sales and orders for comprehensive reporting.
+        Includes sales (direct POS transactions) and orders (created orders) for comprehensive reporting.
         Handles cases where order data may have been reset.
         
         Args:
             report_date: The date to get the report for (defaults to today)
             
         Returns:
-            Dict: Daily sales report data including orders and product details
+            Dict: Daily sales report data including sales, orders and product details
         """
         if report_date is None:
             report_date = date.today()
@@ -243,12 +249,12 @@ class ShiftController:
                 logger.warning(f"Error querying orders for daily report: {e}")
                 daily_orders = []
             
-            # Get completed orders that should be included as sales transactions
+            # Get completed orders (these are orders that were created and then completed)
             completed_orders_list = [order for order in daily_orders if order.status == OrderStatus.COMPLETED]
             
-            # Calculate sales totals (including completed orders as sales)
-            total_sales = len(daily_sales) + len(completed_orders_list)
-            total_sales_amount = sum(sale.total_amount for sale in daily_sales) + sum(order.total_amount for order in completed_orders_list)
+            # Calculate sales totals (only direct sales from POS, not completed orders)
+            total_sales = len(daily_sales)
+            total_sales_amount = sum(sale.total_amount for sale in daily_sales)
             
             # Calculate order totals (handle missing order data gracefully)
             total_orders = len(daily_orders)
@@ -259,7 +265,7 @@ class ShiftController:
             completed_orders = len([o for o in daily_orders if o.status == OrderStatus.COMPLETED])
             cancelled_orders = len([o for o in daily_orders if o.status == OrderStatus.CANCELLED])
             
-            # Get sales by hour (including completed orders as sales)
+            # Get sales by hour (only direct sales from POS)
             hourly_sales = {}
             for sale in daily_sales:
                 hour = sale.timestamp.hour
@@ -268,15 +274,7 @@ class ShiftController:
                 hourly_sales[hour]['count'] += 1
                 hourly_sales[hour]['amount'] += sale.total_amount
             
-            # Add completed orders to hourly sales
-            for order in completed_orders_list:
-                hour = order.completed_at.hour if order.completed_at else order.created_at.hour
-                if hour not in hourly_sales:
-                    hourly_sales[hour] = {'count': 0, 'amount': 0.0}
-                hourly_sales[hour]['count'] += 1
-                hourly_sales[hour]['amount'] += order.total_amount
-            
-            # Get orders by hour (handle missing order data gracefully)
+            # Get orders by hour (include all orders since completed orders are no longer counted as sales)
             hourly_orders = {}
             for order in daily_orders:
                 hour = order.created_at.hour
@@ -511,6 +509,32 @@ class ShiftController:
                 logger.error(f"Error in sale details query: {e}")
                 sale_details_query = []
             
+            # Get transaction summary (one row per transaction)
+            try:
+                transaction_summary_query = self.session.query(
+                    Sale.id.label('sale_id'),
+                    Sale.timestamp.label('sale_timestamp'),
+                    Sale.total_amount.label('sale_total'),
+                    User.username.label('cashier_name'),
+                    func.count(sale_products.c.product_id).label('product_count')
+                ).join(
+                    sale_products, Sale.id == sale_products.c.sale_id
+                ).join(
+                    User, Sale.user_id == User.id
+                ).filter(
+                    and_(
+                        Sale.timestamp >= start_datetime,
+                        Sale.timestamp <= end_datetime
+                    )
+                ).group_by(
+                    Sale.id, Sale.timestamp, Sale.total_amount, User.username
+                ).order_by(
+                    Sale.timestamp.desc(), Sale.id
+                ).all()
+            except Exception as e:
+                logger.error(f"Error in transaction summary query: {e}")
+                transaction_summary_query = []
+            
             # Get detailed completed order information with product breakdown
             try:
                 from models.order import order_products
@@ -608,6 +632,28 @@ class ShiftController:
             except Exception as e:
                 logger.error(f"Error processing order details: {e}")
             
+            # Convert transaction summary query results to list of dictionaries
+            transaction_summary = []
+            try:
+                for row in transaction_summary_query:
+                    try:
+                        transaction_summary_item = {
+                            'sale_id': f"SALE-{row.sale_id}",
+                            'date': row.sale_timestamp.strftime('%Y-%m-%d') if row.sale_timestamp else 'Unknown',
+                            'time': row.sale_timestamp.strftime('%I:%M:%S %p') if row.sale_timestamp else 'Unknown',
+                            'cashier': row.cashier_name or 'Unknown',
+                            'total_amount': float(row.sale_total) if row.sale_total else 0.0,
+                            'product_count': int(row.product_count) if row.product_count else 0,
+                            'transaction_type': 'Sale'
+                        }
+                        transaction_summary.append(transaction_summary_item)
+                    except Exception as e:
+                        logger.error(f"Error processing transaction summary row: {e}")
+                        continue
+            except Exception as e:
+                logger.error(f"Error processing transaction summary: {e}")
+                transaction_summary = []
+            
             # Get shifts for the day
             try:
                 daily_shifts = self.session.query(Shift).filter(
@@ -622,78 +668,90 @@ class ShiftController:
             
             shift_summary = []
             try:
-                for shift in daily_shifts:
-                    try:
-                        # Calculate total sales for this shift
-                        shift_sales = 0.0
-                        shift_sales_count = 0
-                        
-                        # Get sales during this shift period
-                        if shift.close_time:
-                            # For closed shifts, get sales between open and close time
-                            shift_sales_list = self.session.query(Sale).filter(
-                                and_(
-                                    Sale.timestamp >= shift.open_time,
-                                    Sale.timestamp <= shift.close_time,
-                                    Sale.user_id == shift.user_id
-                                )
-                            ).all()
-                        else:
-                            # For open shifts, get sales from open time onwards
-                            shift_sales_list = self.session.query(Sale).filter(
-                                and_(
-                                    Sale.timestamp >= shift.open_time,
-                                    Sale.user_id == shift.user_id
-                                )
-                            ).all()
-                        
-                        # Calculate total sales amount and count
-                        for sale in shift_sales_list:
-                            shift_sales += sale.total_amount
-                            shift_sales_count += 1
-                        
-                        # Also include completed orders for this shift
-                        if shift.close_time:
-                            shift_orders = self.session.query(Order).filter(
-                                and_(
-                                    Order.created_at >= shift.open_time,
-                                    Order.created_at <= shift.close_time,
-                                    Order.user_id == shift.user_id,
-                                    Order.status == OrderStatus.COMPLETED
-                                )
-                            ).all()
-                        else:
-                            shift_orders = self.session.query(Order).filter(
-                                and_(
-                                    Order.created_at >= shift.open_time,
-                                    Order.user_id == shift.user_id,
-                                    Order.status == OrderStatus.COMPLETED
-                                )
-                            ).all()
-                        
-                        for order in shift_orders:
-                            shift_sales += order.total_amount
-                            shift_sales_count += 1
-                        
-                        shift_data = {
-                            'user': shift.user.username if shift.user else 'Unknown',
-                            'opening_amount': shift.opening_amount,
-                            'open_time': shift.open_time,
-                            'close_time': getattr(shift, 'close_time', None),
-                            'status': shift.status.value,
-                            'duration': None,
-                            'total_sales': shift_sales,
-                            'sales_count': shift_sales_count
-                        }
-                        
-                        if shift.close_time:
-                            duration = shift.close_time - shift.open_time
-                            shift_data['duration'] = str(duration).split('.')[0]  # Remove microseconds
-                        
-                        shift_summary.append(shift_data)
-                    except Exception as e:
-                        logger.error(f"Error processing shift data: {e}")
-                        continue
+                # Use fresh session to avoid session binding issues
+                shift_session = self._get_fresh_session()
+                
+                try:
+                    for shift in daily_shifts:
+                        try:
+                            # Reload shift with fresh session to ensure user relationship is available
+                            fresh_shift = shift_session.query(Shift).filter_by(id=shift.id).first()
+                            if not fresh_shift:
+                                logger.warning(f"Shift {shift.id} not found in fresh session")
+                                continue
+                            
+                            # Calculate total sales for this shift
+                            shift_sales = 0.0
+                            shift_sales_count = 0
+                            
+                            # Get sales during this shift period
+                            if fresh_shift.close_time:
+                                # For closed shifts, get sales between open and close time
+                                shift_sales_list = shift_session.query(Sale).filter(
+                                    and_(
+                                        Sale.timestamp >= fresh_shift.open_time,
+                                        Sale.timestamp <= fresh_shift.close_time,
+                                        Sale.user_id == fresh_shift.user_id
+                                    )
+                                ).all()
+                            else:
+                                # For open shifts, get sales from open time onwards
+                                shift_sales_list = shift_session.query(Sale).filter(
+                                    and_(
+                                        Sale.timestamp >= fresh_shift.open_time,
+                                        Sale.user_id == fresh_shift.user_id
+                                    )
+                                ).all()
+                            
+                            # Calculate total sales amount and count
+                            for sale in shift_sales_list:
+                                shift_sales += sale.total_amount
+                                shift_sales_count += 1
+                            
+                            # Also include completed orders for this shift (these are sales transactions)
+                            if fresh_shift.close_time:
+                                shift_orders = shift_session.query(Order).filter(
+                                    and_(
+                                        Order.created_at >= fresh_shift.open_time,
+                                        Order.created_at <= fresh_shift.close_time,
+                                        Order.user_id == fresh_shift.user_id,
+                                        Order.status == OrderStatus.COMPLETED
+                                    )
+                                ).all()
+                            else:
+                                shift_orders = shift_session.query(Order).filter(
+                                    and_(
+                                        Order.created_at >= fresh_shift.open_time,
+                                        Order.user_id == fresh_shift.user_id,
+                                        Order.status == OrderStatus.COMPLETED
+                                    )
+                                ).all()
+                            
+                            for order in shift_orders:
+                                shift_sales += order.total_amount
+                                shift_sales_count += 1
+                            
+                            shift_data = {
+                                'user': fresh_shift.user.username if fresh_shift.user else 'Unknown',
+                                'opening_amount': fresh_shift.opening_amount,
+                                'open_time': fresh_shift.open_time,
+                                'close_time': getattr(fresh_shift, 'close_time', None),
+                                'status': fresh_shift.status.value,
+                                'duration': None,
+                                'total_sales': shift_sales,
+                                'sales_count': shift_sales_count
+                            }
+                            
+                            if fresh_shift.close_time:
+                                duration = fresh_shift.close_time - fresh_shift.open_time
+                                shift_data['duration'] = str(duration).split('.')[0]  # Remove microseconds
+                            
+                            shift_summary.append(shift_data)
+                        except Exception as e:
+                            logger.error(f"Error processing shift data: {e}")
+                            continue
+                finally:
+                    shift_session.close()
             except Exception as e:
                 logger.error(f"Error processing shifts: {e}")
                 shift_summary = []
@@ -719,32 +777,57 @@ class ShiftController:
             # Get employee performance metrics
             employee_performance = {}
             try:
-                # Get all unique cashiers for the day
-                cashiers = set()
-                for sale in daily_sales:
-                    if sale.user and sale.user.username:
-                        cashiers.add(sale.user.username)
+                # Use fresh session to avoid session binding issues
+                perf_session = self._get_fresh_session()
                 
-                for order in completed_orders_list:
-                    if order.user and order.user.username:
-                        cashiers.add(order.user.username)
-                
-                # Calculate performance for each cashier
-                for cashier in cashiers:
-                    cashier_sales = [s for s in daily_sales if s.user and s.user.username == cashier]
-                    cashier_orders = [o for o in completed_orders_list if o.user and o.user.username == cashier]
+                try:
+                    # Get all unique cashiers for the day
+                    cashiers = set()
                     
-                    total_transactions = len(cashier_sales) + len(cashier_orders)
-                    total_revenue = sum(s.total_amount for s in cashier_sales) + sum(o.total_amount for o in cashier_orders)
-                    avg_transaction = total_revenue / total_transactions if total_transactions > 0 else 0
+                    # Get cashiers from sales
+                    for sale in daily_sales:
+                        if sale.user and sale.user.username:
+                            cashiers.add(sale.user.username)
                     
-                    employee_performance[cashier] = {
-                        'sales_count': len(cashier_sales),
-                        'orders_count': len(cashier_orders),
-                        'total_transactions': total_transactions,
-                        'total_revenue': total_revenue,
-                        'average_transaction': avg_transaction
-                    }
+                    # Get cashiers from completed orders using fresh session
+                    for order in completed_orders_list:
+                        try:
+                            # Reload order with fresh session to ensure user relationship is available
+                            fresh_order = perf_session.query(Order).filter_by(id=order.id).first()
+                            if fresh_order and fresh_order.user and fresh_order.user.username:
+                                cashiers.add(fresh_order.user.username)
+                        except Exception as e:
+                            logger.warning(f"Error accessing user for order {order.id}: {e}")
+                            continue
+                    
+                    # Calculate performance for each cashier
+                    for cashier in cashiers:
+                        cashier_sales = [s for s in daily_sales if s.user and s.user.username == cashier]
+                        
+                        # Get cashier orders using fresh session
+                        cashier_orders = []
+                        for order in completed_orders_list:
+                            try:
+                                fresh_order = perf_session.query(Order).filter_by(id=order.id).first()
+                                if fresh_order and fresh_order.user and fresh_order.user.username == cashier:
+                                    cashier_orders.append(fresh_order)
+                            except Exception as e:
+                                logger.warning(f"Error accessing user for order {order.id}: {e}")
+                                continue
+                        
+                        total_transactions = len(cashier_sales) + len(cashier_orders)
+                        total_revenue = sum(s.total_amount for s in cashier_sales) + sum(o.total_amount for o in cashier_orders)
+                        avg_transaction = total_revenue / total_transactions if total_transactions > 0 else 0
+                        
+                        employee_performance[cashier] = {
+                            'sales_count': len(cashier_sales),
+                            'orders_count': len(cashier_orders),
+                            'total_transactions': total_transactions,
+                            'total_revenue': total_revenue,
+                            'average_transaction': avg_transaction
+                        }
+                finally:
+                    perf_session.close()
             except Exception as e:
                 logger.error(f"Error calculating employee performance: {e}")
                 employee_performance = {}
@@ -801,6 +884,7 @@ class ShiftController:
                 'product_details': product_details,
                 'product_sales_summary': product_sales_summary,
                 'sale_details': sale_details, # Added sale_details to the report
+                'transaction_summary': transaction_summary, # Added transaction summary (no duplicates)
                 'shifts': shift_summary,
                 'employee_performance': employee_performance,
                 'customer_analytics': customer_analytics,
@@ -836,6 +920,7 @@ class ShiftController:
                     'top_product_quantity': 0
                 },
                 'sale_details': [], # Added sale_details to the report
+                'transaction_summary': [], # Added transaction summary (no duplicates)
                 'shifts': [],
                 'average_sale': 0.0,
                 'average_order': 0.0,
@@ -938,7 +1023,13 @@ class ShiftController:
                     # Calculate shift duration
                     if shift.open_time and shift.close_time:
                         duration = shift.close_time - shift.open_time
-                        logger.info(f"Shift {shift.id} for user {shift.user.username if shift.user else 'Unknown'} "
+                        # Get username safely to avoid session binding issues
+                        try:
+                            username = shift.user.username if shift.user else "Unknown"
+                        except Exception as e:
+                            logger.warning(f"Error accessing user for shift {shift.id}: {e}")
+                            username = "Unknown"
+                        logger.info(f"Shift {shift.id} for user {username} "
                                   f"closed automatically. Duration: {duration}")
                     
                     closed_count += 1

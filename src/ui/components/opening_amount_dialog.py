@@ -229,7 +229,6 @@ class OpeningAmountDialog(QDialog):
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #c0392b, stop:1 #a93226);
-                transform: scale(1.02);
             }
             QPushButton:pressed {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -271,7 +270,6 @@ class OpeningAmountDialog(QDialog):
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #2980b9, stop:1 #21618c);
-                transform: scale(1.02);
             }
             QPushButton:pressed {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
