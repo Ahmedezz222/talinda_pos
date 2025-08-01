@@ -33,29 +33,76 @@ class OrderCard(QFrame):
     def init_ui(self):
         """Initialize the user interface."""
         self.setFrameStyle(QFrame.StyledPanel)
-        self.setStyleSheet('''
-            OrderCard {
-                background-color: #ffffff;
-                border: 2px solid #e0e0e0;
-                border-radius: 12px;
-                padding: 15px;
-                margin: 5px;
-                min-width: 320px;
-                max-width: 380px;
-                min-height: 200px;
-            }
-            OrderCard:hover {
-                border-color: #3498db;
-                background-color: #f8f9fa;
-            }
-        ''')
         
         # Enable mouse tracking for hover effects
         self.setMouseTracking(True)
         
+        # Set cursor and styling based on order status
+        if self.order.status == OrderStatus.ACTIVE:
+            self.setCursor(Qt.PointingHandCursor)  # Show pointer cursor for active orders
+            # Active orders get full hover effect
+            self.setStyleSheet('''
+                OrderCard {
+                    background-color: #ffffff;
+                    border: 2px solid #e0e0e0;
+                    border-radius: 12px;
+                    padding: 15px;
+                    margin: 5px;
+                    min-width: 320px;
+                    max-width: 380px;
+                    min-height: 200px;
+                }
+                OrderCard:hover {
+                    border-color: #3498db;
+                    background-color: #f8f9fa;
+                }
+            ''')
+        elif self.order.status == OrderStatus.COMPLETED:
+            self.setCursor(Qt.ArrowCursor)  # Show normal cursor for completed orders
+            # Completed orders get minimal hover effect
+            self.setStyleSheet('''
+                OrderCard {
+                    background-color: #f8f9fa;
+                    border: 2px solid #bdc3c7;
+                    border-radius: 12px;
+                    padding: 15px;
+                    margin: 5px;
+                    min-width: 320px;
+                    max-width: 380px;
+                    min-height: 200px;
+                }
+                OrderCard:hover {
+                    border-color: #95a5a6;
+                    background-color: #ecf0f1;
+                }
+            ''')
+        else:
+            self.setCursor(Qt.ArrowCursor)  # Default cursor for other statuses
+            # Default styling for other statuses
+            self.setStyleSheet('''
+                OrderCard {
+                    background-color: #ffffff;
+                    border: 2px solid #e0e0e0;
+                    border-radius: 12px;
+                    padding: 15px;
+                    margin: 5px;
+                    min-width: 320px;
+                    max-width: 380px;
+                    min-height: 200px;
+                }
+                OrderCard:hover {
+                    border-color: #3498db;
+                    background-color: #f8f9fa;
+                }
+            ''')
+        
         # Add tooltip for completed orders
         if self.order.status == OrderStatus.COMPLETED:
-            self.setToolTip("Click to load this completed order into cart for checkout")
+            self.setToolTip("Completed orders cannot be loaded into cart")
+        elif self.order.status == OrderStatus.ACTIVE:
+            self.setToolTip("Click to load this active order into cart for checkout")
+        else:
+            self.setToolTip("Click to load this order into cart for checkout")
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -257,9 +304,15 @@ class OrderCard(QFrame):
     def mousePressEvent(self, event):
         """Handle mouse click events."""
         if event.button() == Qt.LeftButton:
-            # Allow clicking on active and completed orders to load into cart
-            if self.order.status in [OrderStatus.ACTIVE, OrderStatus.COMPLETED]:
+            # Only allow clicking on active orders to load into cart
+            # Completed orders should not be editable or loadable
+            if self.order.status == OrderStatus.ACTIVE:
                 self.order_clicked.emit(self.order)
+            elif self.order.status == OrderStatus.COMPLETED:
+                # Show message that completed orders cannot be loaded
+                QMessageBox.information(self, "Order Status", 
+                    f"Order {self.order.order_number} is already completed and cannot be loaded into cart.\n\n"
+                    "Completed orders are final and cannot be modified.")
         try:
             super().mousePressEvent(event)
         except RuntimeError:

@@ -133,7 +133,7 @@ class DailySalesReportDialog(QDialog):
         data_source_layout = QGridLayout(data_source_group)
         
         # Data source label
-        self.data_source_label = QLabel("Completed Orders")
+        self.data_source_label = QLabel("Completed Orders (No Duplicates)")
         self.data_source_label.setStyleSheet("color: #27ae60; font-weight: bold; font-size: 14px;")
         data_source_layout.addWidget(QLabel("Primary Data Source:"), 0, 0)
         data_source_layout.addWidget(self.data_source_label, 0, 1)
@@ -143,6 +143,11 @@ class DailySalesReportDialog(QDialog):
         self.data_availability_label.setStyleSheet("color: #27ae60; font-weight: bold; font-size: 14px;")
         data_source_layout.addWidget(QLabel("Data Status:"), 1, 0)
         data_source_layout.addWidget(self.data_availability_label, 1, 1)
+        
+        # Duplicate prevention info
+        duplicate_info = QLabel("✅ Duplicate Prevention: Orders created from sales are excluded to prevent double-counting")
+        duplicate_info.setStyleSheet("color: #2c3e50; font-size: 12px; font-style: italic;")
+        data_source_layout.addWidget(duplicate_info, 2, 0, 1, 2)
         
         layout.addWidget(data_source_group)
         

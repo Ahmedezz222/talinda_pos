@@ -1082,28 +1082,44 @@ class ShiftController:
                 daily_orders = order_controller.get_all_orders_for_date(report_date)
                 
                 # Filter to only completed orders and exclude orders created from sales
+                # This prevents duplicates when orders are checked out (which creates both a sale and completes the order)
                 completed_orders = [
                     order for order in daily_orders 
                     if order.status == OrderStatus.COMPLETED 
                     and not order.order_number.startswith("SALE-")
                 ]
+                
+                # Also get active orders to show in the breakdown
+                active_orders = [
+                    order for order in daily_orders 
+                    if order.status == OrderStatus.ACTIVE
+                ]
+                
+                # Get cancelled orders for completeness
+                cancelled_orders = [
+                    order for order in daily_orders 
+                    if order.status == OrderStatus.CANCELLED
+                ]
+                
             except Exception as e:
                 logger.warning(f"Error querying orders for accurate report: {e}")
                 completed_orders = []
+                active_orders = []
+                cancelled_orders = []
             
-            # Calculate totals from completed orders
+            # Calculate totals from completed orders only
             total_transactions = len(completed_orders)
             total_amount = sum(order.total_amount for order in completed_orders)
             average_transaction = total_amount / total_transactions if total_transactions > 0 else 0.0
             
-            # Get product details from completed orders
+            # Get product details from completed orders only
             product_details = []
             total_quantity_sold = 0
             top_product_name = "None"
             top_product_quantity = 0
             
             if completed_orders:
-                # Query product details from completed orders
+                # Query product details from completed orders only
                 try:
                     from models.order import order_products
                     product_details_query = self.session.query(
@@ -1177,7 +1193,7 @@ class ShiftController:
             
             # Determine data source status
             if completed_orders:
-                data_source_status = "Completed Orders"
+                data_source_status = "Completed Orders (No Duplicates)"
                 data_availability = "Available"
             else:
                 data_source_status = "No Data"
@@ -1189,24 +1205,24 @@ class ShiftController:
                 'data_source': data_source_status,
                 'data_availability': data_availability,
                 
-                # Summary metrics
+                # Summary metrics (from completed orders only)
                 'total_transactions': total_transactions,
                 'total_amount': total_amount,
                 'average_transaction': average_transaction,
                 
-                # Product details
+                # Product details (from completed orders only)
                 'product_sales_summary': product_sales_summary,
                 'product_details': product_details,
                 
-                # Order status (for compatibility)
+                # Order status breakdown (for reference)
                 'order_status_breakdown': {
-                    'completed': total_transactions,
-                    'active': 0,
-                    'cancelled': 0
+                    'completed': len(completed_orders),
+                    'active': len(active_orders),
+                    'cancelled': len(cancelled_orders)
                 }
             }
             
-            logger.info(f"Accurate sales report generated for {report_date}: {total_transactions} transactions, ${total_amount:.2f} total")
+            logger.info(f"Accurate sales report generated for {report_date}: {total_transactions} transactions, ${total_amount:.2f} total (no duplicates)")
             return report_data
             
         except Exception as e:
