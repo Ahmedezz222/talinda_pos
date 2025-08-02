@@ -11,12 +11,16 @@ Version: 1.0.0
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
+from sqlalchemy import func, and_, desc
+from datetime import datetime
 
 from .db_config import get_fresh_session, safe_commit
 from models.product import Product, Category
-from models.user import User
+from models.user import User, Shift
+from models.sale import Sale, sale_products
+from models.order import Order, order_products
 
 logger = logging.getLogger(__name__)
 
@@ -106,16 +110,210 @@ class DatabaseManager:
             session.close()
     
     def get_products_by_category(self, category_id: int) -> List[Product]:
-        """Get all products in a specific category."""
+        """Get products by category ID."""
         session = self.get_session()
         try:
             products = session.query(Product).filter(
-                Product.is_active == True,
                 Product.category_id == category_id
             ).order_by(Product.name).all()
             return products
         except Exception as e:
             self.logger.error(f"Error getting products by category {category_id}: {str(e)}")
+            return []
+        finally:
+            session.close()
+    
+    def get_shift_details(self, shift_id: int) -> Optional[Dict[str, Any]]:
+        """Get complete details for a specific shift."""
+        session = self.get_session()
+        try:
+            shift = session.query(Shift).filter(Shift.id == shift_id).first()
+            if not shift:
+                return None
+            
+            # Get user information
+            user = session.query(User).filter(User.id == shift.user_id).first()
+            
+            return {
+                'shift_id': shift.id,
+                'user_id': shift.user_id,
+                'username': user.username if user else 'Unknown',
+                'full_name': user.full_name if user else '',
+                'opening_amount': shift.opening_amount,
+                'open_time': shift.open_time,
+                'close_time': shift.close_time,
+                'status': shift.status.value,
+                'duration': (shift.close_time - shift.open_time) if shift.close_time else None
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting shift details for shift {shift_id}: {str(e)}")
+            return None
+        finally:
+            session.close()
+    
+    def get_shift_sales_by_payment(self, shift_id: int) -> List[Dict[str, Any]]:
+        """Get sales breakdown by payment method for a shift."""
+        session = self.get_session()
+        try:
+            # Get the shift to determine time range
+            shift = session.query(Shift).filter(Shift.id == shift_id).first()
+            if not shift:
+                return []
+            
+            # Get sales during this shift period
+            query = session.query(Sale).filter(
+                and_(
+                    Sale.timestamp >= shift.open_time,
+                    Sale.timestamp <= (shift.close_time or datetime.utcnow())
+                )
+            )
+            
+            # For now, we'll group by total amount since payment method isn't stored
+            # In a real implementation, you'd have a payment_method field in Sale
+            sales = query.all()
+            
+            # Group by payment method (placeholder - assuming all are cash for now)
+            payment_breakdown = {
+                'Cash': sum(sale.total_amount for sale in sales),
+                'Card': 0.0,
+                'Other': 0.0
+            }
+            
+            return [
+                {'payment_method': method, 'total_amount': amount}
+                for method, amount in payment_breakdown.items()
+                if amount > 0
+            ]
+        except Exception as e:
+            self.logger.error(f"Error getting shift sales by payment for shift {shift_id}: {str(e)}")
+            return []
+        finally:
+            session.close()
+    
+    def get_shift_product_sales(self, shift_id: int) -> List[Dict[str, Any]]:
+        """Get product sales details for a shift."""
+        session = self.get_session()
+        try:
+            # Get the shift to determine time range
+            shift = session.query(Shift).filter(Shift.id == shift_id).first()
+            if not shift:
+                return []
+            
+            # Get sales during this shift period with product details
+            sales = session.query(Sale).filter(
+                and_(
+                    Sale.timestamp >= shift.open_time,
+                    Sale.timestamp <= (shift.close_time or datetime.utcnow())
+                )
+            ).all()
+            
+            # Get product sales from sale_products table
+            product_sales = {}
+            for sale in sales:
+                # Get products for this sale
+                sale_items = session.execute(
+                    sale_products.select().where(sale_products.c.sale_id == sale.id)
+                )
+                
+                for item in sale_items:
+                    product_id = item.product_id
+                    quantity = item.quantity
+                    price = item.price_at_sale
+                    total = quantity * price
+                    
+                    if product_id not in product_sales:
+                        product_sales[product_id] = {
+                            'product_id': product_id,
+                            'quantity': 0,
+                            'total_amount': 0.0
+                        }
+                    
+                    product_sales[product_id]['quantity'] += quantity
+                    product_sales[product_id]['total_amount'] += total
+            
+            # Get product names and format results
+            result = []
+            for product_id, data in product_sales.items():
+                product = session.query(Product).filter(Product.id == product_id).first()
+                if product:
+                    result.append({
+                        'product_name': product.name,
+                        'quantity': data['quantity'],
+                        'unit_price': data['total_amount'] / data['quantity'] if data['quantity'] > 0 else 0,
+                        'total_amount': data['total_amount']
+                    })
+            
+            # Sort by total amount descending
+            result.sort(key=lambda x: x['total_amount'], reverse=True)
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error getting shift product sales for shift {shift_id}: {str(e)}")
+            return []
+        finally:
+            session.close()
+    
+    def get_shift_orders(self, shift_id: int) -> List[Dict[str, Any]]:
+        """Get orders created during a shift."""
+        session = self.get_session()
+        try:
+            # Get the shift to determine time range
+            shift = session.query(Shift).filter(Shift.id == shift_id).first()
+            if not shift:
+                return []
+            
+            # Get orders created during this shift period
+            orders = session.query(Order).filter(
+                and_(
+                    Order.created_at >= shift.open_time,
+                    Order.created_at <= (shift.close_time or datetime.utcnow())
+                )
+            ).order_by(Order.created_at).all()
+            
+            result = []
+            for order in orders:
+                result.append({
+                    'order_id': order.id,
+                    'order_number': order.order_number,
+                    'customer_name': order.customer_name or 'Walk-in',
+                    'status': order.status.value,
+                    'created_at': order.created_at,
+                    'total_amount': order.total_amount,
+                    'subtotal': order.subtotal,
+                    'discount_amount': order.discount_amount,
+                    'tax_amount': order.tax_amount
+                })
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error getting shift orders for shift {shift_id}: {str(e)}")
+            return []
+        finally:
+            session.close()
+    
+    def get_all_shifts(self) -> List[Dict[str, Any]]:
+        """Get all shifts with basic information."""
+        session = self.get_session()
+        try:
+            shifts = session.query(Shift).order_by(desc(Shift.open_time)).all()
+            result = []
+            
+            for shift in shifts:
+                user = session.query(User).filter(User.id == shift.user_id).first()
+                result.append({
+                    'shift_id': shift.id,
+                    'username': user.username if user else 'Unknown',
+                    'open_time': shift.open_time,
+                    'close_time': shift.close_time,
+                    'status': shift.status.value,
+                    'opening_amount': shift.opening_amount
+                })
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error getting all shifts: {str(e)}")
             return []
         finally:
             session.close() 

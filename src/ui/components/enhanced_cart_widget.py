@@ -746,12 +746,30 @@ class EnhancedCartWidget(QWidget):
         
         # Check if we're updating an existing order
         if self.loaded_order:
-            # If it's a completed order, process checkout instead of updating
+            # If it's a completed order, process checkout
             if self.loaded_order.status.value == "completed":
                 self.checkout()
             else:
-                # Update existing active order
-                self.update_existing_order()
+                # For active orders, ask user what they want to do
+                from PyQt5.QtWidgets import QMessageBox
+                reply = QMessageBox.question(
+                    self, 
+                    "Active Order Action", 
+                    f"Order {self.loaded_order.order_number} is currently active.\n\n"
+                    f"What would you like to do?\n\n"
+                    f"• Update Order: Modify the order items and details\n"
+                    f"• Checkout Order: Complete the sale and mark order as completed",
+                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                    QMessageBox.Yes
+                )
+                
+                if reply == QMessageBox.Yes:
+                    # Update existing active order
+                    self.update_existing_order()
+                elif reply == QMessageBox.No:
+                    # Checkout the active order
+                    self.checkout_active_order()
+                # If Cancel, do nothing
         else:
             # Create new order
             self.create_new_order()
@@ -862,21 +880,37 @@ class EnhancedCartWidget(QWidget):
         # Refresh cart display
         self.refresh_cart_display()
         
-        # Show confirmation with appropriate message for completed orders
+        # Show confirmation with appropriate message based on order status
         if order.status.value == "completed":
-            QMessageBox.information(self, "Order Loaded", f"Completed order {order.order_number} loaded into cart!\nCustomer: {self.loaded_customer_name or 'No name'}\n\nClick 'Checkout' to process the sale.")
+            QMessageBox.information(
+                self, 
+                "Order Loaded", 
+                f"Completed order {order.order_number} loaded into cart!\n\n"
+                f"Customer: {self.loaded_customer_name or 'No name'}\n"
+                f"Total: ${order.total_amount:.2f}\n\n"
+                f"Click 'Checkout' to process the sale."
+            )
         else:
-            QMessageBox.information(self, "Order Loaded", f"Order {order.order_number} loaded into cart!\nCustomer: {self.loaded_customer_name or 'No name'}")
+            QMessageBox.information(
+                self, 
+                "Order Loaded", 
+                f"Active order {order.order_number} loaded into cart!\n\n"
+                f"Customer: {self.loaded_customer_name or 'No name'}\n"
+                f"Status: {order.get_status_display()}\n\n"
+                f"Click 'Checkout' to:\n"
+                f"• Update the order (modify items/details)\n"
+                f"• Complete the sale (process payment)"
+            )
     
     def update_cart_header(self) -> None:
         """Update the cart header to show loaded order information."""
         if self.loaded_order and self.loaded_customer_name:
-            status_text = " (Completed)" if self.loaded_order.status.value == "completed" else ""
+            status_text = " (Completed)" if self.loaded_order.status.value == "completed" else " (Active)"
             self.cart_header.setText(f"📋 Order {self.loaded_order.order_number} - {self.loaded_customer_name}{status_text}")
             
             if self.loaded_order.status.value == "completed":
                 self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #f39c12; padding: 5px;")
-                # For completed orders, show "Checkout" instead of "Update Order"
+                # For completed orders, show "Checkout" to process the sale
                 self.create_order_btn.setText("Checkout")
                 self.create_order_btn.setStyleSheet("""
                     background-color: #27ae60;
@@ -889,9 +923,9 @@ class EnhancedCartWidget(QWidget):
                     min-height: 45px;
                 """)
             else:
-                self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #27ae60; padding: 5px;")
-                # Update button text to indicate we're updating an existing order
-                self.create_order_btn.setText("Update Order")
+                self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #3498db; padding: 5px;")
+                # For active orders, show "Checkout" to allow both update and checkout options
+                self.create_order_btn.setText("Checkout")
                 self.create_order_btn.setStyleSheet("""
                     background-color: #3498db;
                     color: white;
@@ -903,12 +937,12 @@ class EnhancedCartWidget(QWidget):
                     min-height: 45px;
                 """)
         elif self.loaded_order:
-            status_text = " (Completed)" if self.loaded_order.status.value == "completed" else ""
+            status_text = " (Completed)" if self.loaded_order.status.value == "completed" else " (Active)"
             self.cart_header.setText(f"📋 Order {self.loaded_order.order_number} - No Name{status_text}")
             
             if self.loaded_order.status.value == "completed":
                 self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #f39c12; padding: 5px;")
-                # For completed orders, show "Checkout" instead of "Update Order"
+                # For completed orders, show "Checkout" to process the sale
                 self.create_order_btn.setText("Checkout")
                 self.create_order_btn.setStyleSheet("""
                     background-color: #27ae60;
@@ -921,9 +955,9 @@ class EnhancedCartWidget(QWidget):
                     min-height: 45px;
                 """)
             else:
-                self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #f39c12; padding: 5px;")
-                # Update button text to indicate we're updating an existing order
-                self.create_order_btn.setText("Update Order")
+                self.cart_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #3498db; padding: 5px;")
+                # For active orders, show "Checkout" to allow both update and checkout options
+                self.create_order_btn.setText("Checkout")
                 self.create_order_btn.setStyleSheet("""
                     background-color: #3498db;
                     color: white;
@@ -976,3 +1010,52 @@ class EnhancedCartWidget(QWidget):
             'customer_name': self.loaded_customer_name,
             'notes': self.loaded_notes
         } 
+
+    def checkout_active_order(self) -> None:
+        """Checkout an active order by completing it and processing the sale."""
+        try:
+            if not self.loaded_order:
+                QMessageBox.warning(self, "Error", "No order loaded to checkout.")
+                return
+            
+            # Confirm checkout action
+            reply = QMessageBox.question(
+                self,
+                "Confirm Checkout",
+                f"Are you sure you want to checkout order {self.loaded_order.order_number}?\n\n"
+                f"This will:\n"
+                f"• Complete the sale\n"
+                f"• Mark the order as completed\n"
+                f"• Process payment\n\n"
+                f"Customer: {self.loaded_customer_name or 'No name'}\n"
+                f"Total: ${self.sale_controller.get_cart_total_with_tax():.2f}",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            
+            if reply == QMessageBox.Yes:
+                # First complete the order
+                from controllers.order_controller import OrderController
+                order_controller = OrderController()
+                
+                if order_controller.complete_order(self.loaded_order):
+                    # Then process the sale
+                    if self.sale_controller.complete_sale(self.user):
+                        QMessageBox.information(
+                            self, 
+                            "Success", 
+                            f"Order {self.loaded_order.order_number} checked out successfully!\n\n"
+                            f"Sale completed and order marked as completed."
+                        )
+                        self.clear_cart_after_save()
+                        
+                        # Refresh order management widget to show updated order
+                        self.refresh_order_management()
+                    else:
+                        QMessageBox.warning(self, "Error", "Failed to complete sale. Please try again.")
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to complete order. Please try again.")
+                    
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An error occurred during checkout: {str(e)}")
+            print(f"Checkout error: {e}") 

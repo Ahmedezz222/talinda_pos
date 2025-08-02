@@ -47,6 +47,7 @@ from ui.components.order_widget import OrderManagementWidget
 from ui.components import ShowProductsWindow
 from ui.components.pos_view import ModernPOSView
 from ui.components.language_selector import LanguageSelectorDialog
+from ui.components.shift_details_report import ShiftDetailsReportDialog
 from models.user import UserRole, User
 from utils.localization import tr, set_language, is_rtl
 
@@ -676,6 +677,7 @@ class ModernAdminPanelWidget(QWidget):
         self.auth_controller = AuthController()
         self.logger = logging.getLogger(__name__)
         self.init_ui()
+        self.setup_connections()
         self.load_users()
     
     def init_ui(self):
@@ -871,67 +873,18 @@ class ModernAdminPanelWidget(QWidget):
         layout.setSpacing(15)
         layout.setContentsMargins(20, 25, 20, 20)
         
-        # Buttons
-        buttons_layout = QHBoxLayout()
+        # Shift Details Report button
+        self.shift_details_button = QPushButton("📊 Shift Details Report")
+        self.shift_details_button.setStyleSheet(self.get_button_style("#17a2b8"))
+        self.shift_details_button.setMinimumHeight(50)
+        layout.addWidget(self.shift_details_button)
         
-        daily_report_btn = QPushButton("📈 Daily Sales Report")
-        daily_report_btn.setStyleSheet(self.get_button_style("#9b59b6"))
-        daily_report_btn.clicked.connect(self.show_daily_sales_report)
-        buttons_layout.addWidget(daily_report_btn)
-        
-        shift_report_btn = QPushButton("🕐 Shift Reports")
-        shift_report_btn.setStyleSheet(self.get_button_style("#f39c12"))
-        shift_report_btn.clicked.connect(self.show_shift_reports)
-        buttons_layout.addWidget(shift_report_btn)
-        
-        layout.addLayout(buttons_layout)
+        # Add spacer
+        layout.addStretch()
         
         return section
     
-    def show_daily_sales_report(self):
-        """Show the simple daily sales report dialog."""
-        try:
-            # Check if dialog is already open
-            if hasattr(self, '_sales_report_dialog') and self._sales_report_dialog and self._sales_report_dialog.isVisible():
-                self._sales_report_dialog.raise_()
-                self._sales_report_dialog.activateWindow()
-                return
-                
-            from controllers.shift_controller import ShiftController
-            from ui.components.simple_sale_report_dialog import SimpleSaleReportDialog
-            
-            shift_controller = ShiftController()
-            report_data = shift_controller.get_daily_sales_report()
-            
-            self._sales_report_dialog = SimpleSaleReportDialog(self, report_data)
-            self._sales_report_dialog.finished.connect(lambda: setattr(self, '_sales_report_dialog', None))
-            self._sales_report_dialog.exec_()
-            
-        except Exception as e:
-            self.logger.error(f"Error showing daily sales report: {e}")
-    
-    def show_shift_reports(self):
-        """Show shift reports dialog."""
-        try:
-            # Check if dialog is already open
-            if hasattr(self, '_shift_report_dialog') and self._shift_report_dialog and self._shift_report_dialog.isVisible():
-                self._shift_report_dialog.raise_()
-                self._shift_report_dialog.activateWindow()
-                return
-                
-            from controllers.shift_controller import ShiftController
-            from ui.components.daily_sales_report_dialog import DailySalesReportDialog
-            
-            shift_controller = ShiftController()
-            # Use the comprehensive daily sales report dialog for shift reports
-            report_data = shift_controller.get_daily_sales_report()
-            
-            self._shift_report_dialog = DailySalesReportDialog(self, report_data)
-            self._shift_report_dialog.finished.connect(lambda: setattr(self, '_shift_report_dialog', None))
-            self._shift_report_dialog.exec_()
-            
-        except Exception as e:
-            self.logger.error(f"Error showing shift reports: {e}")
+    # Sale report methods have been removed
     
     def get_button_style(self, color: str) -> str:
         """Get button styling."""
@@ -1084,6 +1037,20 @@ class ModernAdminPanelWidget(QWidget):
                     pass  # User not found
             except Exception as e:
                 self.logger.error(f"Failed to delete user: {str(e)}")
+    
+    def setup_connections(self):
+        """Setup signal connections for admin panel."""
+        if hasattr(self, 'shift_details_button'):
+            self.shift_details_button.clicked.connect(self.show_shift_details_report)
+    
+    def show_shift_details_report(self):
+        """Show the shift details report dialog."""
+        try:
+            dialog = ShiftDetailsReportDialog(self)
+            dialog.exec_()
+        except Exception as e:
+            self.logger.error(f"Error showing shift details report: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to open shift details report: {str(e)}")
     
     def lighten_color(self, color: str) -> str:
         """Lighten a hex color."""
@@ -1724,10 +1691,7 @@ class ModernMainWindow(QMainWindow):
                         widget.setText(tr("admin.edit_user", "Edit User"))
                     elif "Delete User" in widget.text():
                         widget.setText(tr("admin.delete_user", "Delete User"))
-                    elif "Daily Sales Report" in widget.text():
-                        widget.setText(tr("reports.daily_report", "Daily Report"))
-                    elif "Shift Reports" in widget.text():
-                        widget.setText(tr("reports.shift_reports", "Shift Reports"))
+                    # Sale report buttons have been removed
                     
         except Exception as e:
             self.logger.error(f"Error refreshing admin widget: {str(e)}")

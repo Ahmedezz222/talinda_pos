@@ -178,7 +178,7 @@ class LocalizationManager:
             },
             "reports": {
                 "title": "Reports",
-                "sales_report": "Sales Report",
+                # "sales_report": "Sales Report",  # Removed sale report functionality
                 "daily_report": "Daily Report",
                 "weekly_report": "Weekly Report",
                 "monthly_report": "Monthly Report",

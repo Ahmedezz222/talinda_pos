@@ -112,7 +112,7 @@
   },
   "reports": {
     "title": "التقارير",
-    "sales_report": "تقرير المبيعات",
+            // "sales_report": "تقرير المبيعات"  // Removed sale report functionality
     "daily_report": "التقرير اليومي",
     "weekly_report": "التقرير الأسبوعي",
     "monthly_report": "التقرير الشهري",

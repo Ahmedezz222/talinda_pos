@@ -664,7 +664,7 @@ class OrderController:
         """
         Reset the order management system based on the specified type.
         Instead of deleting orders, this method moves them to an archived state
-        to preserve data for sales reports.
+        to preserve data.
         
         Args:
             reset_type: Type of reset to perform
@@ -927,6 +927,276 @@ class OrderController:
             results["errors"].append(error_msg)
             self.session.rollback()
             return results
+
+    def generate_day_report(self, target_date: date) -> Dict[str, any]:
+        """
+        Generate a comprehensive day report for orders on a specific date.
+        
+        Args:
+            target_date: The date to generate the report for
+            
+        Returns:
+            Dict[str, any]: Comprehensive day report data
+        """
+        try:
+            # Get all orders for the date (including archived ones)
+            all_orders = self.get_all_orders_for_date(target_date)
+            
+            # Filter orders by status
+            active_orders = [order for order in all_orders if order.status == OrderStatus.ACTIVE]
+            completed_orders = [order for order in all_orders if order.status == OrderStatus.COMPLETED]
+            cancelled_orders = [order for order in all_orders if order.status == OrderStatus.CANCELLED]
+            
+            # Calculate statistics
+            total_orders = len(all_orders)
+            total_completed = len(completed_orders)
+            total_cancelled = len(cancelled_orders)
+            total_active = len(active_orders)
+            
+            # Calculate financial totals
+            total_revenue = sum(order.total_amount for order in completed_orders)
+            total_subtotal = sum(order.subtotal for order in completed_orders)
+            total_tax = sum(order.tax_amount for order in completed_orders)
+            total_discount = sum(order.discount_amount for order in completed_orders)
+            
+            # Calculate average order values
+            avg_order_value = total_revenue / total_completed if total_completed > 0 else 0
+            avg_subtotal = total_subtotal / total_completed if total_completed > 0 else 0
+            avg_tax = total_tax / total_completed if total_completed > 0 else 0
+            
+            # Get product statistics
+            product_stats = self._get_day_product_statistics(completed_orders)
+            
+            # Get user statistics (who processed the orders)
+            user_stats = self._get_day_user_statistics(completed_orders)
+            
+            # Get hourly distribution
+            hourly_stats = self._get_day_hourly_statistics(completed_orders)
+            
+            # Get customer statistics
+            customer_stats = self._get_day_customer_statistics(completed_orders)
+            
+            # Calculate completion rate
+            completion_rate = (total_completed / total_orders * 100) if total_orders > 0 else 0
+            cancellation_rate = (total_cancelled / total_orders * 100) if total_orders > 0 else 0
+            
+            # Get top performing products
+            top_products = sorted(product_stats, key=lambda x: x['total_revenue'], reverse=True)[:10]
+            
+            # Get top performing users
+            top_users = sorted(user_stats, key=lambda x: x['total_revenue'], reverse=True)[:5]
+            
+            # Get top customers
+            top_customers = sorted(customer_stats, key=lambda x: x['total_spent'], reverse=True)[:10]
+            
+            report_data = {
+                'date': target_date.strftime('%Y-%m-%d'),
+                'summary': {
+                    'total_orders': total_orders,
+                    'completed_orders': total_completed,
+                    'cancelled_orders': total_cancelled,
+                    'active_orders': total_active,
+                    'completion_rate': round(completion_rate, 2),
+                    'cancellation_rate': round(cancellation_rate, 2)
+                },
+                'financial': {
+                    'total_revenue': round(total_revenue, 2),
+                    'total_subtotal': round(total_subtotal, 2),
+                    'total_tax': round(total_tax, 2),
+                    'total_discount': round(total_discount, 2),
+                    'avg_order_value': round(avg_order_value, 2),
+                    'avg_subtotal': round(avg_subtotal, 2),
+                    'avg_tax': round(avg_tax, 2)
+                },
+                'products': {
+                    'total_products_sold': len(product_stats),
+                    'total_quantity_sold': sum(p['quantity'] for p in product_stats),
+                    'product_statistics': product_stats,
+                    'top_products': top_products
+                },
+                'users': {
+                    'total_users': len(user_stats),
+                    'user_statistics': user_stats,
+                    'top_users': top_users
+                },
+                'customers': {
+                    'total_customers': len(customer_stats),
+                    'customer_statistics': customer_stats,
+                    'top_customers': top_customers
+                },
+                'hourly': {
+                    'hourly_statistics': hourly_stats
+                },
+                'orders': {
+                    'all_orders': all_orders,
+                    'completed_orders': completed_orders,
+                    'cancelled_orders': cancelled_orders,
+                    'active_orders': active_orders
+                }
+            }
+            
+            logger.info(f"Day report generated for {target_date}: {total_orders} orders, ${total_revenue:.2f} revenue")
+            return report_data
+            
+        except Exception as e:
+            logger.error(f"Error generating day report for {target_date}: {e}")
+            return {}
+    
+    def _get_day_product_statistics(self, orders: List[Order]) -> List[Dict]:
+        """Get product statistics for the day."""
+        try:
+            product_stats = {}
+            
+            for order in orders:
+                order_items = order.get_order_items()
+                for item in order_items:
+                    product = item['product']
+                    product_id = product.id
+                    quantity = item['quantity']
+                    price = item['price']
+                    total = price * quantity
+                    
+                    if product_id not in product_stats:
+                        # Get category name safely by refreshing the session if needed
+                        category_name = 'Unknown'
+                        try:
+                            if product.category:
+                                category_name = product.category.name
+                        except Exception:
+                            # If there's a session issue, try to get category from database
+                            try:
+                                from models.product import Product
+                                from database.db_config import get_fresh_session
+                                session = get_fresh_session()
+                                try:
+                                    fresh_product = session.query(Product).filter_by(id=product_id).first()
+                                    if fresh_product and fresh_product.category:
+                                        category_name = fresh_product.category.name
+                                finally:
+                                    session.close()
+                            except Exception:
+                                category_name = 'Unknown'
+                        
+                        product_stats[product_id] = {
+                            'product_id': product_id,
+                            'product_name': product.name,
+                            'category': category_name,
+                            'quantity': 0,
+                            'total_revenue': 0.0,
+                            'avg_price': 0.0,
+                            'orders_count': 0
+                        }
+                    
+                    product_stats[product_id]['quantity'] += quantity
+                    product_stats[product_id]['total_revenue'] += total
+                    product_stats[product_id]['orders_count'] += 1
+            
+            # Calculate average prices
+            for product_id, stats in product_stats.items():
+                if stats['quantity'] > 0:
+                    stats['avg_price'] = stats['total_revenue'] / stats['quantity']
+            
+            return list(product_stats.values())
+            
+        except Exception as e:
+            logger.error(f"Error getting day product statistics: {e}")
+            return []
+    
+    def _get_day_user_statistics(self, orders: List[Order]) -> List[Dict]:
+        """Get user statistics for the day."""
+        try:
+            user_stats = {}
+            
+            for order in orders:
+                user_id = order.user_id
+                user_name = order.user.full_name or order.user.username
+                total_amount = order.total_amount
+                
+                if user_id not in user_stats:
+                    user_stats[user_id] = {
+                        'user_id': user_id,
+                        'user_name': user_name,
+                        'orders_count': 0,
+                        'total_revenue': 0.0,
+                        'avg_order_value': 0.0
+                    }
+                
+                user_stats[user_id]['orders_count'] += 1
+                user_stats[user_id]['total_revenue'] += total_amount
+            
+            # Calculate average order values
+            for user_id, stats in user_stats.items():
+                if stats['orders_count'] > 0:
+                    stats['avg_order_value'] = stats['total_revenue'] / stats['orders_count']
+            
+            return list(user_stats.values())
+            
+        except Exception as e:
+            logger.error(f"Error getting day user statistics: {e}")
+            return []
+    
+    def _get_day_hourly_statistics(self, orders: List[Order]) -> List[Dict]:
+        """Get hourly distribution statistics for the day."""
+        try:
+            hourly_stats = {}
+            
+            # Initialize all hours
+            for hour in range(24):
+                hourly_stats[hour] = {
+                    'hour': hour,
+                    'orders_count': 0,
+                    'total_revenue': 0.0,
+                    'avg_order_value': 0.0
+                }
+            
+            for order in orders:
+                hour = order.created_at.hour
+                total_amount = order.total_amount
+                
+                hourly_stats[hour]['orders_count'] += 1
+                hourly_stats[hour]['total_revenue'] += total_amount
+            
+            # Calculate average order values
+            for hour, stats in hourly_stats.items():
+                if stats['orders_count'] > 0:
+                    stats['avg_order_value'] = stats['total_revenue'] / stats['orders_count']
+            
+            return list(hourly_stats.values())
+            
+        except Exception as e:
+            logger.error(f"Error getting day hourly statistics: {e}")
+            return []
+    
+    def _get_day_customer_statistics(self, orders: List[Order]) -> List[Dict]:
+        """Get customer statistics for the day."""
+        try:
+            customer_stats = {}
+            
+            for order in orders:
+                customer_name = order.customer_name or 'Anonymous'
+                total_amount = order.total_amount
+                
+                if customer_name not in customer_stats:
+                    customer_stats[customer_name] = {
+                        'customer_name': customer_name,
+                        'orders_count': 0,
+                        'total_spent': 0.0,
+                        'avg_order_value': 0.0
+                    }
+                
+                customer_stats[customer_name]['orders_count'] += 1
+                customer_stats[customer_name]['total_spent'] += total_amount
+            
+            # Calculate average order values
+            for customer_name, stats in customer_stats.items():
+                if stats['orders_count'] > 0:
+                    stats['avg_order_value'] = stats['total_spent'] / stats['orders_count']
+            
+            return list(customer_stats.values())
+            
+        except Exception as e:
+            logger.error(f"Error getting day customer statistics: {e}")
+            return []
 
     def __del__(self):
         """Clean up the session."""

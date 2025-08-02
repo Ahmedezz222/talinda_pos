@@ -422,7 +422,7 @@ class SaleController:
                     if order_controller.complete_order(self.loaded_order):
                         logger.info(f"Completed loaded order {self.loaded_order.order_number} from sale")
                         # Don't create a new order since we're completing an existing one
-                        # This prevents duplication in the sales report
+                        # This prevents duplication
                     else:
                         logger.warning(f"Failed to complete loaded order {self.loaded_order.order_number}")
                 except Exception as e:
