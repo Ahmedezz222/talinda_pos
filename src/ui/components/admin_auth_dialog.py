@@ -135,6 +135,10 @@ class AdminAuthDialog(QDialog):
         password_layout.addWidget(password_label)
         password_layout.addWidget(self.password_input)
         layout.addLayout(password_layout)
+        
+        # Add enter key handling for better UX
+        self.username_input.returnPressed.connect(lambda: self.password_input.setFocus())
+        self.password_input.returnPressed.connect(self.authenticate)
     
     def create_footer(self, layout):
         """Create the footer section with buttons."""

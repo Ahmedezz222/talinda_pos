@@ -368,6 +368,8 @@ class OpeningAmountDialog(QDialog):
                     stop:0 #ffffff, stop:1 #e3f2fd);
             }
         """)
+        # Add enter key handling
+        self.amount_input.returnPressed.connect(self.handle_open_new_shift)
         layout.addWidget(self.amount_input)
         
         # Add some spacing

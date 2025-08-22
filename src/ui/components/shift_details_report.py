@@ -14,6 +14,7 @@ import sys
 import os
 from typing import Optional, Dict, Any
 from pathlib import Path
+from datetime import datetime, date
 
 # Add the src directory to Python path
 current_dir = Path(__file__).parent.parent.parent.absolute()
@@ -23,14 +24,14 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
     QWidget, QGridLayout, QTableWidget, QTableWidgetItem, QGroupBox,
     QFrame, QSplitter, QTextEdit, QComboBox, QMessageBox, QHeaderView,
-    QSizePolicy, QSpacerItem, QTabWidget
+    QSizePolicy, QSpacerItem, QTabWidget, QDateEdit
 )
 from PyQt5.QtGui import (
     QFont, QPalette, QColor, QPixmap, QIcon, QPainter, QBrush,
     QLinearGradient
 )
 from PyQt5.QtCore import (
-    Qt, QTimer, QSize, QRect, QPropertyAnimation, QEasingCurve
+    Qt, QTimer, QSize, QRect, QPropertyAnimation, QEasingCurve, QDate
 )
 
 from controllers.shift_controller import ShiftController
@@ -152,6 +153,30 @@ class ShiftDetailsReportDialog(QDialog):
                 border-top: 5px solid #6c757d;
                 margin-right: 10px;
             }
+            QDateEdit {
+                padding: 12px;
+                border: 3px solid #dee2e6;
+                border-radius: 8px;
+                background-color: white;
+                font-size: 14px;
+                min-height: 20px;
+                min-width: 150px;
+            }
+            QDateEdit:focus {
+                border-color: #007bff;
+                border-width: 3px;
+            }
+            QDateEdit::drop-down {
+                border: none;
+                width: 30px;
+            }
+            QDateEdit::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #6c757d;
+                margin-right: 10px;
+            }
             QLabel {
                 color: #2c3e50;
                 font-size: 14px;
@@ -219,6 +244,7 @@ class ShiftDetailsReportDialog(QDialog):
         # Create tabs
         self.create_overview_tab()
         self.create_sales_tab()
+        self.create_cashier_sales_tab()
         self.create_products_tab()
         self.create_orders_tab()
         
@@ -280,9 +306,17 @@ class ShiftDetailsReportDialog(QDialog):
         layout = QHBoxLayout(widget)
         layout.setSpacing(20)
         
+        # Date selection
+        layout.addWidget(QLabel("📅 Date:"))
+        self.date_edit = QDateEdit()
+        self.date_edit.setDate(QDate.currentDate())
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("yyyy-MM-dd")
+        layout.addWidget(self.date_edit)
+        
         # Shift selection combo box
         self.shift_combo = QComboBox()
-        self.shift_combo.setMinimumWidth(500)
+        self.shift_combo.setMinimumWidth(400)
         self.shift_combo.setStyleSheet("""
             QComboBox {
                 font-size: 14px;
@@ -332,11 +366,12 @@ class ShiftDetailsReportDialog(QDialog):
         self.duration_label = QLabel("Duration: -")
         self.opening_amount_label = QLabel("Opening Amount: -")
         self.status_label = QLabel("Status: -")
+        self.cashier_sales_label = QLabel("Cashier Sales: -")
         
         # Style the labels
         for label in [self.shift_id_label, self.user_label, self.open_time_label,
                      self.close_time_label, self.duration_label, self.opening_amount_label,
-                     self.status_label]:
+                     self.status_label, self.cashier_sales_label]:
             label.setStyleSheet("""
                 QLabel {
                     font-size: 16px;
@@ -369,6 +404,9 @@ class ShiftDetailsReportDialog(QDialog):
         
         overview_layout.addWidget(QLabel("📊 Status:"), 3, 0)
         overview_layout.addWidget(self.status_label, 3, 1)
+        
+        overview_layout.addWidget(QLabel("👤 Cashier Sales:"), 3, 2)
+        overview_layout.addWidget(self.cashier_sales_label, 3, 3)
         
         layout.addWidget(overview_group)
         layout.addStretch()
@@ -403,6 +441,37 @@ class ShiftDetailsReportDialog(QDialog):
         layout.addStretch()
         
         self.tab_widget.addTab(sales_widget, "💳 Sales")
+    
+    def create_cashier_sales_tab(self):
+        """Create the cashier sales tab."""
+        cashier_sales_widget = QWidget()
+        layout = QVBoxLayout(cashier_sales_widget)
+        layout.setSpacing(25)
+        
+        # Cashier sales section
+        cashier_group = QGroupBox("👤 Sales by Cashier")
+        cashier_layout = QVBoxLayout(cashier_group)
+        
+        # Create table
+        self.cashier_table = QTableWidget()
+        self.cashier_table.setColumnCount(3)
+        self.cashier_table.setHorizontalHeaderLabels([
+            "Cashier Name", "Total Transactions", "Total Amount"
+        ])
+        self.cashier_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.cashier_table.setAlternatingRowColors(True)
+        self.cashier_table.setStyleSheet("""
+            QTableWidget {
+                font-size: 14px;
+                min-height: 250px;
+            }
+        """)
+        
+        cashier_layout.addWidget(self.cashier_table)
+        layout.addWidget(cashier_group)
+        layout.addStretch()
+        
+        self.tab_widget.addTab(cashier_sales_widget, "👤 Cashier Sales")
     
     def create_products_tab(self):
         """Create the products tab."""
@@ -530,33 +599,65 @@ class ShiftDetailsReportDialog(QDialog):
     
     def setup_connections(self):
         """Setup signal connections."""
+        self.date_edit.dateChanged.connect(self.on_date_changed)
         self.load_button.clicked.connect(self.load_shift_report)
         self.print_button.clicked.connect(self.print_report)
         self.export_button.clicked.connect(self.export_report)
         self.close_button.clicked.connect(self.close)
     
+    def on_date_changed(self):
+        """Handle date change event."""
+        self.load_shifts()
+    
     def load_shifts(self):
-        """Load available shifts into the combo box."""
+        """Load available shifts into the combo box for the selected date."""
         try:
-            shifts = self.db_manager.get_all_shifts()
+            selected_date = self.date_edit.date().toPyDate()
+            shifts = self.db_manager.get_shifts_by_date(selected_date)
             self.shift_combo.clear()
             
-            for shift in shifts:
-                shift_text = f"Shift #{shift['shift_id']} - {shift['username']} - {shift['open_time'].strftime('%Y-%m-%d %H:%M')}"
-                self.shift_combo.addItem(shift_text, shift['shift_id'])
-            
             if shifts:
+                for shift in shifts:
+                    shift_text = f"Shift #{shift['shift_id']} - {shift['username']} - {shift['open_time'].strftime('%H:%M')}"
+                    self.shift_combo.addItem(shift_text, shift['shift_id'])
+                
                 self.shift_combo.setCurrentIndex(0)
                 self.load_shift_report()
+            else:
+                # Add a placeholder item when no shifts found
+                self.shift_combo.addItem("No shifts found for selected date", None)
+                self.clear_report_data()
             
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to load shifts: {str(e)}")
+    
+    def clear_report_data(self):
+        """Clear all report data when no shift is selected."""
+        # Clear overview section
+        self.shift_id_label.setText("Shift ID: -")
+        self.user_label.setText("User: -")
+        self.open_time_label.setText("Open Time: -")
+        self.close_time_label.setText("Close Time: -")
+        self.duration_label.setText("Duration: -")
+        self.opening_amount_label.setText("Opening Amount: -")
+        self.status_label.setText("Status: -")
+        self.cashier_sales_label.setText("Cashier Sales: -")
+        
+        # Clear tables
+        self.payment_table.setRowCount(0)
+        self.cashier_table.setRowCount(0)
+        self.products_table.setRowCount(0)
+        self.orders_table.setRowCount(0)
+        
+        self.shift_data = None
+        self.current_shift_id = None
     
     def load_shift_report(self):
         """Load the selected shift report."""
         try:
             shift_id = self.shift_combo.currentData()
             if not shift_id:
+                self.clear_report_data()
                 return
             
             # Get shift details report
@@ -571,6 +672,7 @@ class ShiftDetailsReportDialog(QDialog):
             # Update UI with report data
             self.update_overview_section(report['shift_details'])
             self.update_payment_section(report['sales_by_payment'])
+            self.update_cashier_sales_section(report['sales_by_cashier'])
             self.update_products_section(report['product_sales'])
             self.update_orders_section(report['orders'])
             
@@ -597,6 +699,13 @@ class ShiftDetailsReportDialog(QDialog):
         
         self.opening_amount_label.setText(f"Opening Amount: ${shift_details['opening_amount']:.2f}")
         self.status_label.setText(f"Status: {shift_details['status'].title()}")
+        
+        # Calculate total cashier sales from the shift data
+        if hasattr(self, 'shift_data') and self.shift_data and 'sales_by_cashier' in self.shift_data:
+            total_cashier_sales = sum(item['total_amount'] for item in self.shift_data['sales_by_cashier'])
+            self.cashier_sales_label.setText(f"Cashier Sales: ${total_cashier_sales:.2f}")
+        else:
+            self.cashier_sales_label.setText("Cashier Sales: $0.00")
     
     def update_payment_section(self, sales_by_payment: list):
         """Update the payment section with sales data."""
@@ -612,6 +721,25 @@ class ShiftDetailsReportDialog(QDialog):
             amount_item = QTableWidgetItem(f"${item['total_amount']:.2f}")
             amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.payment_table.setItem(row, 1, amount_item)
+    
+    def update_cashier_sales_section(self, sales_by_cashier: list):
+        """Update the cashier sales section with sales data."""
+        self.cashier_table.setRowCount(len(sales_by_cashier))
+        
+        for row, item in enumerate(sales_by_cashier):
+            # Cashier name
+            name_item = QTableWidgetItem(item['cashier_name'])
+            self.cashier_table.setItem(row, 0, name_item)
+            
+            # Total transactions
+            transactions_item = QTableWidgetItem(str(item['total_transactions']))
+            transactions_item.setTextAlignment(Qt.AlignCenter)
+            self.cashier_table.setItem(row, 1, transactions_item)
+            
+            # Total amount
+            amount_item = QTableWidgetItem(f"${item['total_amount']:.2f}")
+            amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.cashier_table.setItem(row, 2, amount_item)
     
     def update_products_section(self, product_sales: list):
         """Update the products section with sales data."""

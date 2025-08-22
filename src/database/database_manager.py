@@ -292,6 +292,47 @@ class DatabaseManager:
         finally:
             session.close()
     
+    def get_shift_sales_by_cashier(self, shift_id: int) -> List[Dict[str, Any]]:
+        """Get sales breakdown by cashier for a shift."""
+        session = self.get_session()
+        try:
+            # Get the shift to determine time range
+            shift = session.query(Shift).filter(Shift.id == shift_id).first()
+            if not shift:
+                return []
+            
+            # Get sales during this shift period grouped by cashier
+            sales_by_cashier = session.query(
+                Sale.user_id,
+                User.username,
+                func.count(Sale.id).label('total_transactions'),
+                func.sum(Sale.total_amount).label('total_amount')
+            ).join(User, Sale.user_id == User.id).filter(
+                and_(
+                    Sale.timestamp >= shift.open_time,
+                    Sale.timestamp <= (shift.close_time or datetime.utcnow())
+                )
+            ).group_by(Sale.user_id, User.username).all()
+            
+            result = []
+            for cashier_id, username, transactions, amount in sales_by_cashier:
+                result.append({
+                    'cashier_id': cashier_id,
+                    'cashier_name': username,
+                    'total_transactions': transactions,
+                    'total_amount': float(amount) if amount else 0.0
+                })
+            
+            # Sort by total amount descending
+            result.sort(key=lambda x: x['total_amount'], reverse=True)
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error getting shift sales by cashier for shift {shift_id}: {str(e)}")
+            return []
+        finally:
+            session.close()
+    
     def get_all_shifts(self) -> List[Dict[str, Any]]:
         """Get all shifts with basic information."""
         session = self.get_session()
@@ -314,6 +355,41 @@ class DatabaseManager:
             
         except Exception as e:
             self.logger.error(f"Error getting all shifts: {str(e)}")
+            return []
+        finally:
+            session.close()
+    
+    def get_shifts_by_date(self, target_date: datetime.date) -> List[Dict[str, Any]]:
+        """Get shifts for a specific date."""
+        session = self.get_session()
+        try:
+            # Convert date to datetime for comparison
+            start_datetime = datetime.combine(target_date, datetime.min.time())
+            end_datetime = datetime.combine(target_date, datetime.max.time())
+            
+            shifts = session.query(Shift).filter(
+                and_(
+                    Shift.open_time >= start_datetime,
+                    Shift.open_time <= end_datetime
+                )
+            ).order_by(desc(Shift.open_time)).all()
+            
+            result = []
+            for shift in shifts:
+                user = session.query(User).filter(User.id == shift.user_id).first()
+                result.append({
+                    'shift_id': shift.id,
+                    'username': user.username if user else 'Unknown',
+                    'open_time': shift.open_time,
+                    'close_time': shift.close_time,
+                    'status': shift.status.value,
+                    'opening_amount': shift.opening_amount
+                })
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error getting shifts for date {target_date}: {str(e)}")
             return []
         finally:
             session.close() 

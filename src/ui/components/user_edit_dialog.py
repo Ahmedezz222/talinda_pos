@@ -257,6 +257,12 @@ class UserEditDialog(QDialog):
         # Load user data if editing
         if self.user:
             self.load_user_data()
+        
+        # Add enter key handling for better UX
+        self.username_input.returnPressed.connect(lambda: self.fullname_input.setFocus())
+        self.fullname_input.returnPressed.connect(lambda: self.role_combo.setFocus())
+        self.password_input.returnPressed.connect(lambda: self.confirm_password_input.setFocus())
+        self.confirm_password_input.returnPressed.connect(self.save_user)
     
     def load_user_data(self):
         """Load existing user data into the form."""

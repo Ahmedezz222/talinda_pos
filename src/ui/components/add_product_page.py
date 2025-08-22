@@ -205,6 +205,13 @@ class AddProductPage(QWidget):
         """)
         submit_btn.clicked.connect(self.submit)
         
+        # Add enter key handling for better UX
+        self.name_input.returnPressed.connect(lambda: self.desc_input.setFocus())
+        self.desc_input.returnPressed.connect(lambda: self.price_input.setFocus())
+        self.price_input.returnPressed.connect(lambda: self.cat_combo.setFocus())
+        self.barcode_input.returnPressed.connect(lambda: self.image_input.setFocus())
+        self.image_input.returnPressed.connect(self.submit)
+        
         reset_btn = QPushButton('Reset Form')
         reset_btn.setMinimumHeight(45)
         reset_btn.setStyleSheet("""

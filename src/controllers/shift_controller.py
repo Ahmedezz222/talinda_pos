@@ -360,6 +360,9 @@ class ShiftController:
             # Get sales by payment method
             sales_by_payment = self.db_manager.get_shift_sales_by_payment(shift_id)
             
+            # Get sales by cashier
+            sales_by_cashier = self.db_manager.get_shift_sales_by_cashier(shift_id)
+            
             # Get product sales details
             product_sales = self.db_manager.get_shift_product_sales(shift_id)
             
@@ -375,6 +378,7 @@ class ShiftController:
             report = {
                 'shift_details': shift_details,
                 'sales_by_payment': sales_by_payment,
+                'sales_by_cashier': sales_by_cashier,
                 'product_sales': product_sales,
                 'orders': orders,
                 'summary': {

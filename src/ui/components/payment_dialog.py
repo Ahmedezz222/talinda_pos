@@ -44,6 +44,8 @@ class PaymentDialog(QDialog):
         self.amount_input = QLineEdit()
         self.amount_input.setPlaceholderText("Enter payment amount")
         self.amount_input.textChanged.connect(self.validate_payment)
+        # Add enter key handling
+        self.amount_input.returnPressed.connect(self.on_enter_pressed)
         
         amount_layout.addWidget(amount_label)
         amount_layout.addWidget(self.amount_input)
@@ -63,6 +65,15 @@ class PaymentDialog(QDialog):
         button_layout.addWidget(cancel_btn)
         button_layout.addWidget(confirm_btn)
         layout.addLayout(button_layout)
+    
+    def on_enter_pressed(self):
+        """Handle Enter key press in the amount input field."""
+        if self.confirm_button.isEnabled():
+            # If confirm button is enabled, trigger the payment
+            self.accept()
+        else:
+            # If confirm button is disabled, validate and show feedback
+            self.validate_payment()
     
     def validate_payment(self):
         """Validate the payment amount."""

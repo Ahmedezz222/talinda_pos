@@ -159,6 +159,11 @@ class NewOrderDialog(QDialog):
         btn_layout.addWidget(cancel_btn)
         btn_layout.addWidget(create_btn)
         layout.addLayout(btn_layout)
+        
+        # Add enter key handling for better UX
+        self.customer_name_input.returnPressed.connect(lambda: self.notes_input.setFocus())
+        # For QTextEdit, we need to handle Ctrl+Enter for new line and Enter for submit
+        self.notes_input.installEventFilter(self)
     
     def display_cart_items(self):
         """Display cart items in the dialog."""
@@ -228,6 +233,19 @@ class NewOrderDialog(QDialog):
         layout.addLayout(qty_layout)
         
         return item_frame
+    
+    def eventFilter(self, obj, event):
+        """Handle events for the notes input field."""
+        if obj == self.notes_input and event.type() == event.KeyPress:
+            if event.key() == Qt.Key_Return and event.modifiers() == Qt.NoModifier:
+                # Enter without Ctrl - create order
+                if self.create_button.isEnabled():
+                    self.create_order()
+                return True
+            elif event.key() == Qt.Key_Return and event.modifiers() == Qt.ControlModifier:
+                # Ctrl+Enter - insert new line
+                return False
+        return super().eventFilter(obj, event)
     
     def create_order(self):
         """Save the order."""
