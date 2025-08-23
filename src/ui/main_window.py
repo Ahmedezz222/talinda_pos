@@ -528,7 +528,6 @@ class ModernPOSWidget(QWidget):
         # Ensure products container has proper layout direction for Arabic
         if is_rtl():
             self.products_container.setLayoutDirection(Qt.LeftToRight)
-            self.products_layout.setDirection(Qt.LeftToRight)
         
         # Calculate responsive grid columns using helper function
         card_width = 200  # Product cards can be larger
