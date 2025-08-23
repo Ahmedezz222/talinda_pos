@@ -390,8 +390,16 @@ class ModernPOSView(QWidget):
         # Loading indicator
         self.create_loading_indicator(main_layout)
         
-        self.setMinimumSize(1000, 700)
-        self.resize(1200, 800)
+        # Use responsive sizing
+        from utils.responsive_ui import ResponsiveUI
+        
+        window_size = ResponsiveUI.get_responsive_window_size()
+        # Scale down slightly for POS view
+        pos_width = int(window_size.width() * 0.9)
+        pos_height = int(window_size.height() * 0.9)
+        
+        self.setMinimumSize(pos_width, pos_height)
+        self.resize(pos_width, pos_height)
     
     def create_header_section(self, parent_layout):
         """Create the header section."""

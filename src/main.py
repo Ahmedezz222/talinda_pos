@@ -41,7 +41,7 @@ from init_database import init_database
 from utils.background_tasks import BackgroundTaskManager
 from utils.daily_reset_task import DailyResetTask
 from database.db_config import safe_commit, Session
-from utils.localization import tr, set_language, is_rtl
+from utils.localization import tr, set_language, is_rtl, apply_arabic_to_widget
 
 
 # Import configuration
@@ -57,8 +57,8 @@ class ApplicationConfig:
     APP_VERSION = config.APP_VERSION
     APP_AUTHOR = config.APP_AUTHOR
     
-    # Window settings
-    LOGIN_WINDOW_SIZE = (380, 480)  # Slightly smaller window size
+    # Window settings - Now responsive
+    LOGIN_WINDOW_SIZE = None  # Will be calculated dynamically
     LOGIN_WINDOW_TITLE = f"{APP_NAME} - Login"
     
     # File paths
@@ -71,6 +71,25 @@ class ApplicationConfig:
     SUCCESS_COLOR = config.SUCCESS_COLOR
     ERROR_COLOR = config.ERROR_COLOR
     WARNING_COLOR = config.WARNING_COLOR
+    
+    @staticmethod
+    def get_login_window_size():
+        """Get responsive login window size."""
+        from utils.responsive_ui import ResponsiveUI
+        screen_width, screen_height, scaling_factor = ResponsiveUI.get_screen_info()
+        
+        # Calculate responsive size based on screen size
+        if screen_width < 1024:  # Small screens
+            width = int(350 * scaling_factor)
+            height = int(450 * scaling_factor)
+        elif screen_width < 1440:  # Medium screens
+            width = int(400 * scaling_factor)
+            height = int(500 * scaling_factor)
+        else:  # Large screens
+            width = int(450 * scaling_factor)
+            height = int(550 * scaling_factor)
+        
+        return (width, height)
 
 
 class LoggingConfig:
@@ -189,7 +208,9 @@ class ModernLoginDialog(QDialog):
     def init_ui(self):
         """Initialize the login dialog UI."""
         self.setWindowTitle(ApplicationConfig.LOGIN_WINDOW_TITLE)
-        self.setFixedSize(*ApplicationConfig.LOGIN_WINDOW_SIZE)
+        # Use responsive sizing
+        window_size = ApplicationConfig.get_login_window_size()
+        self.setFixedSize(*window_size)
         self.setWindowFlags(Qt.Window | Qt.WindowCloseButtonHint)
         
         # Main layout with improved spacing
@@ -588,7 +609,7 @@ class ModernLoginDialog(QDialog):
         password = self.password_input.text()
         
         if not username or not password:
-            self.show_error("Please enter both username and password.")
+            self.show_error(tr("login.please_enter_both", "Please enter both username and password."))
             return
         
         # Disable login button during authentication

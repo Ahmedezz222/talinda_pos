@@ -49,7 +49,7 @@ from ui.components.pos_view import ModernPOSView
 from ui.components.language_selector import LanguageSelectorDialog
 from ui.components.shift_details_report import ShiftDetailsReportDialog
 from models.user import UserRole, User
-from utils.localization import tr, set_language, is_rtl
+from utils.localization import tr, set_language, is_rtl, apply_arabic_to_widget
 
 
 class ModernPOSWidget(QWidget):
@@ -1095,9 +1095,14 @@ class ModernMainWindow(QMainWindow):
     
     def init_ui(self):
         """Initialize the main window UI."""
+        from utils.responsive_ui import ResponsiveUI
+        
         self.setWindowTitle(tr("main_window.title", "Talinda POS System"))
-        self.setMinimumSize(1400, 900)
-        self.resize(1600, 1000)
+        
+        # Use responsive sizing
+        window_size = ResponsiveUI.get_responsive_window_size()
+        self.setMinimumSize(window_size.width(), window_size.height())
+        self.resize(window_size.width(), window_size.height())
         
         # Set window icon and properties
         self.setWindowIcon(QIcon("resources/styles/logo.png"))
@@ -1135,9 +1140,14 @@ class ModernMainWindow(QMainWindow):
     
     def create_sidebar(self) -> QListWidget:
         """Create the modern sidebar."""
+        from utils.responsive_ui import ResponsiveUI
+        
         sidebar = QListWidget()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(250)
+        
+        # Use responsive sidebar width
+        sidebar_width = ResponsiveUI.get_responsive_sidebar_width()
+        sidebar.setFixedWidth(sidebar_width)
         sidebar.setStyleSheet("""
             QListWidget#sidebar {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,

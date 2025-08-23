@@ -30,7 +30,11 @@ class ProductCard(QFrame):
     def init_ui(self):
         """Initialize the user interface."""
         self.setFrameStyle(QFrame.NoFrame)
-        self.setFixedSize(200, 160)
+        # Use responsive sizing
+        from utils.responsive_ui import ResponsiveUI
+        
+        card_size = ResponsiveUI.get_responsive_card_size()
+        self.setFixedSize(card_size.width(), card_size.height())
         self.setCursor(Qt.PointingHandCursor)
         
         # Main layout
@@ -54,7 +58,12 @@ class ProductCard(QFrame):
         """Create the product image/icon section."""
         # Image container
         image_container = QFrame()
-        image_container.setFixedSize(80, 60)
+        # Use responsive image size
+        card_size = ResponsiveUI.get_responsive_card_size()
+        img_width = int(card_size.width() * 0.4)  # 40% of card width
+        img_height = int(card_size.height() * 0.45)  # 45% of card height
+        
+        image_container.setFixedSize(img_width, img_height)
         image_container.setObjectName("imageContainer")
         
         # Product icon/emoji based on category

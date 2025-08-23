@@ -14,6 +14,7 @@
     "username_required": "اسم المستخدم مطلوب",
     "password_required": "كلمة المرور مطلوبة",
     "both_required": "يرجى إدخال اسم المستخدم وكلمة المرور.",
+    "please_enter_both": "يرجى إدخال اسم المستخدم وكلمة المرور.",
     "remember_me": "تذكرني",
     "forgot_password": "نسيت كلمة المرور؟",
     "create_account": "إنشاء حساب",
@@ -112,7 +113,6 @@
   },
   "reports": {
     "title": "التقارير",
-            // "sales_report": "تقرير المبيعات"  // Removed sale report functionality
     "daily_report": "التقرير اليومي",
     "weekly_report": "التقرير الأسبوعي",
     "monthly_report": "التقرير الشهري",

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from PyQt5.QtCore import QTranslator, QLocale, QCoreApplication, Qt
 from PyQt5.QtWidgets import QApplication
+from .arabic_support import ArabicSupport, setup_arabic_support, apply_arabic_to_widget
 
 
 class LocalizationManager:
@@ -80,6 +81,7 @@ class LocalizationManager:
                 "username_required": "Username is required",
                 "password_required": "Password is required",
                 "both_required": "Please enter both username and password.",
+                "please_enter_both": "Please enter both username and password.",
                 "remember_me": "Remember Me",
                 "forgot_password": "Forgot Password?",
                 "create_account": "Create Account",
@@ -178,7 +180,6 @@ class LocalizationManager:
             },
             "reports": {
                 "title": "Reports",
-                # "sales_report": "Sales Report",  # Removed sale report functionality
                 "daily_report": "Daily Report",
                 "weekly_report": "Weekly Report",
                 "monthly_report": "Monthly Report",
@@ -345,6 +346,7 @@ class LocalizationManager:
                 "username_required": "اسم المستخدم مطلوب",
                 "password_required": "كلمة المرور مطلوبة",
                 "both_required": "يرجى إدخال اسم المستخدم وكلمة المرور.",
+                "please_enter_both": "يرجى إدخال اسم المستخدم وكلمة المرور.",
                 "remember_me": "تذكرني",
                 "forgot_password": "نسيت كلمة المرور؟",
                 "create_account": "إنشاء حساب",
@@ -599,19 +601,24 @@ class LocalizationManager:
         
         self.current_language = language
         
-        # Set Qt locale for RTL support
+        # Set Qt locale and layout direction
         if language == 'ar':
-            QApplication.setLayoutDirection(Qt.RightToLeft)
-            locale = QLocale(QLocale.Arabic, QLocale.SaudiArabia)
+            # Setup Arabic support
+            ArabicSupport.setup_rtl_layout()
+            arabic_support = setup_arabic_support()
+            if arabic_support['success']:
+                # Apply Arabic stylesheet
+                QApplication.instance().setStyleSheet(arabic_support['stylesheet'])
         else:
-            QApplication.setLayoutDirection(Qt.LeftToRight)
-            locale = QLocale(QLocale.English, QLocale.UnitedStates)
-        
-        QLocale.setDefault(locale)
+            # Setup English support
+            ArabicSupport.setup_ltr_layout()
         
         # Load Qt translator if available
-        if self.translator.load(f"qt_{language}", QLocale.system().uiLanguages()[0]):
-            QCoreApplication.installTranslator(self.translator)
+        try:
+            if self.translator.load(f"qt_{language}", QLocale.system().uiLanguages()[0]):
+                QCoreApplication.installTranslator(self.translator)
+        except Exception as e:
+            print(f"Warning: Could not load Qt translator for {language}: {e}")
     
     def get_text(self, key: str, default: str = None) -> str:
         """Get translated text by key."""
@@ -621,6 +628,13 @@ class LocalizationManager:
             
             for k in keys:
                 value = value[k]
+            
+            # Apply Arabic support if needed
+            if self.current_language == 'ar' and value:
+                # Check if the text contains Arabic characters
+                if ArabicSupport.is_arabic_text(value):
+                    # The text will be properly handled by the Arabic support system
+                    pass
             
             return value
         except (KeyError, TypeError):
@@ -647,6 +661,12 @@ class LocalizationManager:
     def is_rtl(self) -> bool:
         """Check if current language is RTL (Right-to-Left)."""
         return self.current_language == 'ar'
+    
+    def apply_arabic_to_widget(self, widget, text=None):
+        """Apply Arabic support to a widget."""
+        if self.current_language == 'ar':
+            return apply_arabic_to_widget(widget, text)
+        return False
 
 
 # Global instance
@@ -665,7 +685,25 @@ def set_language(language: str):
 
 def is_rtl() -> bool:
     """Convenience function to check if current language is RTL."""
-    return localization_manager.is_rtl() 
+    return localization_manager.is_rtl()
+
+
+def apply_arabic_to_widget(widget, text=None):
+    """Convenience function to apply Arabic support to a widget."""
+    from .arabic_support import ArabicSupport
+    return ArabicSupport.setup_widget_for_arabic(widget, text)
+
+
+def is_arabic_text(text):
+    """Convenience function to check if text contains Arabic characters."""
+    from .arabic_support import ArabicSupport
+    return ArabicSupport.is_arabic_text(text)
+
+
+def get_arabic_text_alignment(text):
+    """Convenience function to get appropriate text alignment for Arabic text."""
+    from .arabic_support import ArabicSupport
+    return ArabicSupport.get_text_alignment(text) 
 
 
 def format_time_12hour(dt):

@@ -27,7 +27,11 @@ class DiscountDialog(QDialog):
     def __init__(self, parent=None, item_name="", current_discount_percent=0.0, current_discount_amount=0.0):
         super().__init__(parent)
         self.setWindowTitle(f"Apply Discount - {item_name}")
-        self.setFixedSize(300, 200)
+        # Use responsive sizing
+        from utils.responsive_ui import ResponsiveUI
+        
+        dialog_size = ResponsiveUI.get_responsive_dialog_size('standard')
+        self.setFixedSize(dialog_size.width(), dialog_size.height())
         self.discount_percentage = current_discount_percent
         self.discount_amount = current_discount_amount
         self.init_ui()
@@ -95,7 +99,11 @@ class CartDiscountDialog(QDialog):
     def __init__(self, parent=None, current_percent=0.0, current_amount=0.0):
         super().__init__(parent)
         self.setWindowTitle("Apply Cart Discount")
-        self.setFixedSize(300, 200)
+        # Use responsive sizing
+        from utils.responsive_ui import ResponsiveUI
+        
+        dialog_size = ResponsiveUI.get_responsive_dialog_size('standard')
+        self.setFixedSize(dialog_size.width(), dialog_size.height())
         self.discount_percentage = current_percent
         self.discount_amount = current_amount
         self.init_ui()

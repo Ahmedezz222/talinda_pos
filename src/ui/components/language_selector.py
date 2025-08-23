@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
 
-from utils.localization import tr, set_language, is_rtl
+from utils.localization import tr, set_language, is_rtl, apply_arabic_to_widget
 
 
 class LanguageSelector(QWidget):
@@ -48,6 +48,8 @@ class LanguageSelector(QWidget):
                 margin-bottom: 10px;
             }
         """)
+        # Apply Arabic support if needed
+        apply_arabic_to_widget(title_label, tr("common.language", "Language"))
         layout.addWidget(title_label)
         
         # Language selection frame
@@ -132,6 +134,8 @@ class LanguageSelector(QWidget):
                 font-style: italic;
             }
         """)
+        # Apply Arabic support if needed
+        apply_arabic_to_widget(info_label, tr("common.language_info", "Language changes will take effect immediately"))
         layout.addWidget(info_label)
         
         # Set size policy
