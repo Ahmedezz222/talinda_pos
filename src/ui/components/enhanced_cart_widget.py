@@ -834,6 +834,13 @@ class EnhancedCartWidget(QWidget):
     
     def create_new_order(self) -> None:
         """Create a new order from cart items."""
+        if not self.user:
+            QMessageBox.warning(self, "Error", "No user available. Please log in again.")
+            return
+            
+        # Make sure sale controller has the user set
+        self.sale_controller.current_user = self.user
+            
         # Show new order dialog with loaded order information
         from ui.components.new_order_dialog import NewOrderDialog
         dialog = NewOrderDialog(

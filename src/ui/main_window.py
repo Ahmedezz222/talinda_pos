@@ -36,6 +36,7 @@ from PyQt5.QtCore import (
 )
 
 import bcrypt
+from utils.responsive_ui import ResponsiveUI
 from controllers.auth_controller import AuthController
 from controllers.product_controller import ProductController
 from controllers.sale_controller import SaleController
@@ -331,6 +332,7 @@ class ModernPOSWidget(QWidget):
         
         # Items container with improved grid layout
         self.products_container = QWidget()
+        self.products_container.setObjectName("products_container")
         self.products_layout = QGridLayout(self.products_container)
         self.products_layout.setSpacing(15)
         self.products_layout.setContentsMargins(20, 20, 20, 20)
@@ -395,22 +397,24 @@ class ModernPOSWidget(QWidget):
         
         # Category color scheme with Arabic categories
         category_colors = {
-            'FOOD': {'bg': '#ff6b6b', 'text': 'white'},
-            'DRINKS': {'bg': '#4ecdc4', 'text': 'white'},
-            'SETS': {'bg': '#45b7d1', 'text': 'white'},
-            'MAKIS': {'bg': '#96ceb4', 'text': 'white'},
-            'NIGIRIS': {'bg': '#feca57', 'text': 'black'},
-            'SASHIMI': {'bg': '#ff9ff3', 'text': 'white'},
-            'GUNKANS': {'bg': '#54a0ff', 'text': 'white'},
-            'FINGER FOOD': {'bg': '#5f27cd', 'text': 'white'},
-            'HANDROLLS': {'bg': '#00d2d3', 'text': 'white'},
-            'DESERTS': {'bg': '#ff9f43', 'text': 'white'},
-            'SIDE DISHES': {'bg': '#10ac84', 'text': 'white'},
-            'SPECIAL MAKIS': {'bg': '#ee5a24', 'text': 'white'},
-            'ALCOHOL': {'bg': '#2f3542', 'text': 'white'},
-            'FRIS': {'bg': '#747d8c', 'text': 'white'},
-            'HOT DRINKS': {'bg': '#a55eea', 'text': 'white'},
-            'CUSTOM FOOD PRICE': {'bg': '#26de81', 'text': 'white'},
+            'الأطباق الرئيسية': {'bg': '#ff6b6b', 'text': 'white'},
+            'مكرونات': {'bg': '#4ecdc4', 'text': 'white'},
+            'سندوتشات': {'bg': '#45b7d1', 'text': 'white'},
+            'مقبلات': {'bg': '#96ceb4', 'text': 'white'},
+            'بيتزا': {'bg': '#feca57', 'text': 'black'},
+            'سلطات': {'bg': '#ff9ff3', 'text': 'white'},
+            'شوربة': {'bg': '#54a0ff', 'text': 'white'},
+            'عصائر طازجة': {'bg': '#5f27cd', 'text': 'white'},
+            'كوكتيلات': {'bg': '#00d2d3', 'text': 'white'},
+            'سموذي': {'bg': '#ff9f43', 'text': 'white'},
+            'مشروبات ساخنة': {'bg': '#10ac84', 'text': 'white'},
+            'قهوة': {'bg': '#ee5a24', 'text': 'white'},
+            'مشروبات باردة': {'bg': '#2f3542', 'text': 'white'},
+            'فرابية': {'bg': '#747d8c', 'text': 'white'},
+            'ميلك شيك': {'bg': '#a55eea', 'text': 'white'},
+            'حلويات': {'bg': '#26de81', 'text': 'white'},
+            'شيشة': {'bg': '#8e44ad', 'text': 'white'},
+            'صواني': {'bg': '#e67e22', 'text': 'white'},
         }
         
         # Calculate responsive grid columns using helper function
@@ -521,6 +525,11 @@ class ModernPOSWidget(QWidget):
             self.logger.error(f"Failed to load products: {str(e)}")
             return
         
+        # Ensure products container has proper layout direction for Arabic
+        if is_rtl():
+            self.products_container.setLayoutDirection(Qt.LeftToRight)
+            self.products_layout.setDirection(Qt.LeftToRight)
+        
         # Calculate responsive grid columns using helper function
         card_width = 200  # Product cards can be larger
         spacing = 15
@@ -611,8 +620,22 @@ class ModernPOSWidget(QWidget):
     
     def calculate_optimal_grid_columns(self, card_width: int, spacing: int = 15) -> int:
         """Calculate optimal number of columns for the current window size."""
-        available_width = max(400, self.width() - 400)
-        max_cols = max(3, min(5, int((available_width - spacing) / (card_width + spacing))))
+        # Get the actual available width from the products scroll area
+        if hasattr(self, 'products_scroll') and self.products_scroll:
+            available_width = self.products_scroll.width() - 40  # Account for margins
+        else:
+            # Fallback to window width calculation
+            available_width = max(400, self.width() - 400)
+        
+        # Ensure we have a reasonable minimum width
+        available_width = max(300, available_width)
+        
+        # Calculate columns with better logic
+        max_cols = max(2, int((available_width - spacing) / (card_width + spacing)))
+        
+        # Limit to reasonable range
+        max_cols = min(max_cols, 6)
+        
         return max_cols
     
     def lighten_color(self, color: str) -> str:
@@ -1081,7 +1104,11 @@ class ModernMainWindow(QMainWindow):
         self.user = user
         self.opening_amount = opening_amount
         self.product_controller = ProductController()
+        
+        # Create sale controller and set user
         self.sale_controller = SaleController()
+        self.sale_controller.current_user = user
+        
         self.logger = logging.getLogger(__name__)
         
         # Add missing attributes for the new POS view
@@ -1197,6 +1224,9 @@ class ModernMainWindow(QMainWindow):
     
     def init_pages(self):
         """Initialize all pages."""
+        # Make sure sale controller has the current user
+        self.sale_controller.current_user = self.user
+        
         # POS System page - Using the Modern POS Widget with cart functionality
         self.pos_widget = ModernPOSWidget(
             user=self.user,

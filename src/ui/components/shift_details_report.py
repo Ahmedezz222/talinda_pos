@@ -124,7 +124,6 @@ class ShiftDetailsReportDialog(QDialog):
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #0056b3, stop:1 #004085);
-                transform: translateY(-1px);
             }
             QPushButton:pressed {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,

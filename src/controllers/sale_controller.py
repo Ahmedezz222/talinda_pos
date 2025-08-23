@@ -435,10 +435,15 @@ class SaleController:
                     order_controller = OrderController()
                     
                     # Create a new order with completed status
+                    # Ensure we have a valid user before creating the order
+                    if not self.current_user:
+                        logger.error("Cannot create order without a user")
+                        raise Exception("No user available for order creation")
+
                     order = Order(
                         order_number=f"SALE-{sale.id:06d}",
                         customer_name="Walk-in Customer",
-                        user_id=self.current_user.id,
+                        user_id=self.current_user.id,  # This should now be valid as we checked above
                         status=OrderStatus.COMPLETED,
                         subtotal=self.get_cart_subtotal(),
                         discount_amount=self.get_cart_discount_total(),

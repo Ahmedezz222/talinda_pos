@@ -12,8 +12,8 @@ Version: 1.0.0
 
 import logging
 from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, desc
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, and_, desc, select
 from datetime import datetime
 
 from .db_config import get_fresh_session, safe_commit
@@ -57,7 +57,7 @@ class DatabaseManager:
         """Get all products, optionally filtered by category."""
         session = self.get_session()
         try:
-            query = session.query(Product)
+            query = session.query(Product).options(joinedload(Product.category))
             
             if category:
                 query = query.filter(Product.category_id == category.id)

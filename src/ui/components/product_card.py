@@ -8,6 +8,9 @@ import os
 current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, current_dir)
 
+# Import ResponsiveUI
+from utils.responsive_ui import ResponsiveUI
+
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel,
                            QPushButton, QFrame, QHBoxLayout)
 from PyQt5.QtCore import pyqtSignal, Qt
@@ -114,30 +117,39 @@ class ProductCard(QFrame):
             return '📦'
     
     def create_info_section(self, layout):
-        """Create the product information section."""
-        # Product name
-        name_label = QLabel(self.product.name)
-        name_label.setObjectName('productName')
-        name_label.setAlignment(Qt.AlignCenter)
-        name_label.setWordWrap(True)
-        name_label.setMaximumHeight(40)
-        layout.addWidget(name_label)
+        """Create the information section of the product card."""
+        self.info_container = QFrame(self)
+        self.info_container.setObjectName("infoContainer")
+        info_layout = QVBoxLayout(self.info_container)
+        info_layout.setContentsMargins(4, 4, 4, 4)
+        info_layout.setSpacing(2)
+
+        # Product Name with fixed height and elided text
+        self.name_label = QLabel(self.product.name, self.info_container)
+        self.name_label.setObjectName("productName")
+        self.name_label.setWordWrap(True)
+        self.name_label.setFixedHeight(40)  # Fixed height for consistent sizing
         
-        # Price and stock row
-        info_layout = QHBoxLayout()
+        # Elide text if too long
+        metrics = self.name_label.fontMetrics()
+        elided_text = metrics.elidedText(
+            self.product.name, Qt.ElideRight, self.name_label.width() - 10
+        )
+        self.name_label.setText(elided_text)
+        info_layout.addWidget(self.name_label)
         
-        # Price
-        price_label = QLabel(f"${self.product.price:.2f}")
-        price_label.setObjectName('productPrice')
-        price_label.setAlignment(Qt.AlignLeft)
+        # Add the price label
+        price_label = QLabel(f"${self.product.price:.2f}", self.info_container)
+        price_label.setObjectName("productPrice")
+        price_label.setAlignment(Qt.AlignCenter)
         info_layout.addWidget(price_label)
         
-        # Stock indicator
+        # Add the stock indicator
         stock_label = self.create_stock_label()
-        stock_label.setAlignment(Qt.AlignRight)
-        info_layout.addWidget(stock_label)
+        info_layout.addWidget(stock_label, alignment=Qt.AlignCenter)
         
-        layout.addLayout(info_layout)
+        # Add the info container to the main layout
+        layout.addWidget(self.info_container)
     
     def create_stock_label(self) -> QLabel:
         """Create availability label (always available)."""
@@ -153,39 +165,63 @@ class ProductCard(QFrame):
             ProductCard {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #ffffff, stop:1 #f8f9fa);
-                border: 2px solid #e9ecef;
-                border-radius: 16px;
+                border: 2px solid #e0e0e0;
+                border-radius: 10px;
                 padding: 8px;
             }
             ProductCard:hover {
-                border-color: #007bff;
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #ffffff, stop:1 #e3f2fd);
+                    stop:0 #f8f9fa, stop:1 #ffffff);
+                border: 2px solid #2196F3;
             }
             QFrame#imageContainer {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #007bff, stop:1 #0056b3);
-                border-radius: 12px;
+                    stop:0 #2196F3, stop:1 #1976D2);
+                border-radius: 8px;
                 border: none;
+                min-height: 60px;
+                max-height: 60px;
+                margin: 2px;
+            }
+            QFrame#imageContainer QLabel {
+                font-size: 32px;
+                color: white;
+            }
+            QFrame#infoContainer {
+                background-color: transparent;
+                border: none;
+                margin-top: 12px;
+                padding: 4px;
             }
             QLabel#productName {
+                font-family: 'Segoe UI', 'Arial', sans-serif;
                 font-weight: bold;
-                font-size: 14px;
-                color: #212529;
-                background-color: transparent;
-                margin: 4px 0;
+                font-size: 12px;
+                color: #2c3e50;
+                background-color: #f8f9fa;
+                padding: 4px 8px;
+                border-radius: 6px;
+                qproperty-alignment: AlignCenter;
+                margin: 2px;
+                min-height: 30px;
             }
             QLabel#productPrice {
-                color: #28a745;
-                font-size: 18px;
+                color: #00796B;
+                font-size: 13px;
                 font-weight: bold;
-                background-color: transparent;
+                background-color: #E0F2F1;
+                padding: 4px 8px;
+                border-radius: 6px;
+                margin: 4px 2px;
             }
             QLabel#productStock {
-                color: #6c757d;
-                font-size: 12px;
+                color: #43A047;
+                font-size: 13px;
                 font-weight: bold;
-                background-color: transparent;
+                background-color: #E8F5E9;
+                padding: 6px;
+                border-radius: 6px;
+                margin: 4px;
             }
         ''')
     

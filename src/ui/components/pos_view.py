@@ -54,7 +54,7 @@ class ModernProductCard(QFrame):
     
     def init_ui(self):
         """Initialize the modern product card UI."""
-        self.setFixedSize(180, 200)
+        self.setFixedSize(220, 280)
         self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("productCard")
         
@@ -79,19 +79,53 @@ class ModernProductCard(QFrame):
         self.image_label.setText("📦")
         layout.addWidget(self.image_label, alignment=Qt.AlignCenter)
         
-        # Product name
+        # Product name with icon
+        name_layout = QHBoxLayout()
+        name_layout.setSpacing(5)
+        
+        product_icon = QLabel("📦")
+        product_icon.setStyleSheet("font-size: 16px;")
+        name_layout.addWidget(product_icon)
+        
         self.name_label = QLabel(self.product.name)
         self.name_label.setObjectName("productName")
-        self.name_label.setAlignment(Qt.AlignCenter)
+        self.name_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.name_label.setWordWrap(True)
         self.name_label.setMaximumHeight(40)
-        layout.addWidget(self.name_label)
+        name_layout.addWidget(self.name_label, stretch=1)
+        layout.addLayout(name_layout)
         
-        # Price
+        # Category with icon
+        if hasattr(self.product, 'category') and self.product.category:
+            category_layout = QHBoxLayout()
+            category_layout.setSpacing(5)
+            
+            category_icon = QLabel("📁")
+            category_icon.setStyleSheet("font-size: 14px;")
+            category_layout.addWidget(category_icon)
+            
+            category_label = QLabel(self.product.category.name)
+            category_label.setObjectName("categoryName")
+            category_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            category_label.setStyleSheet("color: #6c757d; font-size: 12px;")
+            category_layout.addWidget(category_label, stretch=1)
+            
+            layout.addLayout(category_layout)
+        
+        # Price with currency icon
+        price_layout = QHBoxLayout()
+        price_layout.setSpacing(5)
+        
+        price_icon = QLabel("💰")
+        price_icon.setStyleSheet("font-size: 16px;")
+        price_layout.addWidget(price_icon)
+        
         self.price_label = QLabel(f"${self.product.price:.2f}")
         self.price_label.setObjectName("productPrice")
-        self.price_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.price_label)
+        self.price_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        price_layout.addWidget(self.price_label, stretch=1)
+        
+        layout.addLayout(price_layout)
         
         # Availability status
         self.availability_label = self.create_availability_label()
@@ -122,32 +156,42 @@ class ModernProductCard(QFrame):
                 background-color: white;
                 border: 2px solid #e9ecef;
                 border-radius: 12px;
-                padding: 8px;
+                padding: 12px;
             }
             QFrame#productCard:hover {
                 border-color: #007bff;
                 background-color: #f8f9fa;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             }
             QLabel#productName {
-                font-size: 14px;
+                font-size: 15px;
                 font-weight: bold;
-                color: #212529;
+                color: #2c3e50;
                 background-color: transparent;
+                margin-bottom: 4px;
+            }
+            QLabel#categoryName {
+                font-size: 13px;
+                color: #7f8c8d;
+                background-color: transparent;
+                margin-bottom: 4px;
             }
             QLabel#productPrice {
-                font-size: 16px;
+                font-size: 18px;
                 font-weight: bold;
-                color: #007bff;
+                color: #27ae60;
                 background-color: transparent;
+                margin-top: 4px;
             }
             QPushButton#addButton {
                 background-color: #007bff;
                 color: white;
                 border: none;
                 border-radius: 6px;
-                padding: 8px 12px;
-                font-size: 12px;
+                padding: 10px 15px;
+                font-size: 13px;
                 font-weight: bold;
+                margin-top: 8px;
             }
             QPushButton#addButton:hover {
                 background-color: #0056b3;
@@ -354,7 +398,15 @@ class ModernPOSView(QWidget):
         self.settings = settings
         self.database_manager = database_manager
         self.current_user = current_user
+        # Make sure we have a user
+        if not current_user:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Error", "No user available. Please log in again.")
+            return
+            
         self.pos_controller = POSController(database_manager, current_user, settings)
+        # Make sure to set the user in the sale controller too
+        self.pos_controller.sale_controller.current_user = current_user
         
         # Data storage
         self.all_products = []
@@ -612,8 +664,8 @@ class ModernPOSView(QWidget):
             return
         
         # Calculate grid layout
-        available_width = self.products_scroll.width() - 40  # Account for margins
-        card_width = 180
+        available_width = self.products_scroll.width() - 60  # Account for margins
+        card_width = 220  # Match the new card width
         max_cols = max(1, available_width // card_width)
         
         # Add product cards to grid
@@ -651,10 +703,14 @@ class ModernPOSView(QWidget):
     def on_product_selected(self, product: Product):
         """Handle product selection."""
         try:
+            # Set current user if not set
+            if not self.current_user:
+                # Show error message if no user is logged in
+                QMessageBox.warning(self, "Authentication Required", "Please log in to add items to cart.")
+                return
 
-            
-            # Emit signal for cart integration
-            # This can be connected to the cart widget
+            # Add product to cart using POS controller
+            self.pos_controller.add_to_cart(product)
             logger.info(f"Product selected: {product.name}")
             
             # Show confirmation

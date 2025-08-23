@@ -36,6 +36,7 @@ class Config:
     LOG_FILE = os.getenv('LOG_FILE', 'logs/talinda_pos.log')
     LOG_FORMAT = os.getenv('LOG_FORMAT', 
                           '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    LOG_ENCODING = os.getenv('LOG_ENCODING', 'utf-8')
     
     # UI settings
     WINDOW_WIDTH = int(os.getenv('WINDOW_WIDTH', '1200'))

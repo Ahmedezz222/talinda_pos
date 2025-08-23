@@ -101,18 +101,32 @@ class LoggingConfig:
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
         
-        logging.basicConfig(
-            level=config.get_log_level(),
-            format=config.LOG_FORMAT,
-            handlers=[
-                logging.FileHandler(log_dir / Path(config.LOG_FILE).name),
-                logging.StreamHandler(sys.stdout)
-            ]
+        # Create log file handler with UTF-8 encoding
+        file_handler = logging.FileHandler(
+            log_dir / Path(config.LOG_FILE).name,
+            encoding='utf-8'
         )
+        
+        # Create console handler with UTF-8 encoding
+        console_handler = logging.StreamHandler(sys.stdout)
+        
+        # Create formatter
+        formatter = logging.Formatter(config.LOG_FORMAT)
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+        
+        # Set root logger configuration
+        root_logger = logging.getLogger()
+        root_logger.setLevel(config.get_log_level())
+        root_logger.addHandler(file_handler)
+        root_logger.addHandler(console_handler)
         
         # Set specific loggers
         logging.getLogger('PyQt5').setLevel(logging.WARNING)
         logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
+        
+        # Log encoding information
+        root_logger.info("Logging initialized with UTF-8 encoding")
 
 
 class SplashScreen(QDialog):

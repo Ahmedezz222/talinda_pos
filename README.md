@@ -1,94 +1,84 @@
-# Talinda POS System
+# Talinda POS
 
-A modern, feature-rich Point of Sale system built with Python and PyQt5.
+A modern Point of Sale system built with PyQt5 and SQLAlchemy.
 
 ## Features
 
-- Modern and beautiful UI using PyQt5
-- Multi-language support (Arabic & English)
-- User role management (admin, cashier, etc.)
+- Modern and responsive UI with PyQt5
+- Secure user authentication
+- Multi-language support (English and Arabic)
+- Product and category management
+- Order processing and tracking
+- Sales reporting and analytics
 - Shift management
-- Sales and inventory management
-- Report generation
-- SQLite database integration
-- Touch-friendly design
-
-## Requirements
-
-- Python 3.8+
-- Dependencies listed in requirements.txt
+- Background task automation
 
 ## Installation
 
-1. Clone the repository
-2. Create a virtual environment:
+### Method 1: Using the Installer (Recommended)
+
+1. Download the latest release from the releases page
+2. Run the installer executable
+3. Follow the installation wizard instructions
+4. Launch Talinda POS from the Start Menu or Desktop shortcut
+
+### Method 2: Manual Installation
+
+1. Ensure you have Python 3.8 or higher installed
+2. Clone the repository:
+   ```bash
+   git clone https://github.com/Ahmedezz222/talinda_pos.git
+   cd talinda_pos
    ```
+
+3. Create and activate a virtual environment:
+   ```bash
    python -m venv venv
+   # On Windows:
+   .\venv\Scripts\activate
+   # On Linux/macOS:
+   source venv/bin/activate
    ```
-3. Activate the virtual environment:
-   - Windows:
-     ```
-     .\venv\Scripts\activate
-     ```
-   - Linux/Mac:
-     ```
-     source venv/bin/activate
-     ```
-4. Install dependencies:
-   ```
+
+4. Install required packages:
+   ```bash
    pip install -r requirements.txt
    ```
 
-## Quick Start
+5. Run the application:
+   ```bash
+   python src/main.py
+   ```
 
-### 1. Setup (First Time Only)
-```bash
-python setup_for_new_device.py
-```
+### Method 3: Building from Source
 
-### 2. Verify Setup
-```bash
-python verify_admin_user.py
-```
+1. Follow steps 1-3 from Method 2
+2. Install development dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### 3. Run the Application
-```bash
-python src/main.py
-```
+3. Build the executable:
+   ```bash
+   python build.py
+   ```
 
-### 4. Login with Default Credentials
-- **Username:** `admin`
-- **Password:** `admin123`
+4. The executable will be available in the `dist` directory
 
-## Default Users
+## Default Credentials
 
-The system comes with pre-configured default users:
+- Username: admin
+- Password: admin123
 
-**Admin User:**
-- Username: `admin`
-- Password: `admin123`
-- Role: Administrator
+It is highly recommended to change these credentials after first login.
 
-**Cashier User:**
-- Username: `cashier`
-- Password: `cashier123`
-- Role: Cashier
+## System Requirements
 
-⚠️ **Important:** Change these default passwords after first login!
+- Operating System: Windows 7/8/10/11, Linux, or macOS
+- RAM: 4GB minimum (8GB recommended)
+- Storage: 500MB free space
+- Display: 1280x720 minimum resolution
 
-For detailed instructions, see [ADMIN_USER_GUIDE.md](ADMIN_USER_GUIDE.md)
+## Support
 
-## Development
-
-The project follows a modular architecture:
-
-- `src/ui/`: User interface components
-- `src/database/`: Database models and operations
-- `src/models/`: Business logic models
-- `src/controllers/`: Application controllers
-- `src/utils/`: Utility functions
-- `src/resources/`: Application resources (images, translations, etc.)
-
-## License
-
-MIT License
+For support, please create an issue on the GitHub repository or contact support@talindapos.com

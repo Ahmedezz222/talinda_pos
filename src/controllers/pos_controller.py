@@ -16,6 +16,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from models.product import Product, Category
 from models.user import User
+from controllers.sale_controller import SaleController
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class POSController:
         self.current_user = current_user
         self.settings = settings
         self.logger = logging.getLogger(__name__)
+        self.sale_controller = SaleController()
     
     def get_categories(self) -> List[Category]:
         """Get all active categories."""
@@ -106,9 +108,38 @@ class POSController:
         """Get the current user."""
         return self.current_user
     
+    def set_current_user(self, user: User) -> None:
+        """Set the current user."""
+        self.current_user = user
+        # Update sale controller user as well
+        self.sale_controller.current_user = user
+    
     def get_settings(self) -> Optional[Dict[str, Any]]:
         """Get the current settings."""
         return self.settings
+
+    def add_to_cart(self, product: Product, quantity: int = 1) -> bool:
+        """Add a product to the cart."""
+        if not self.current_user:
+            self.logger.error("Attempted to add to cart without a logged-in user")
+            return False
+
+        try:
+            # First update the sale controller's user if needed
+            if self.sale_controller.current_user != self.current_user:
+                self.sale_controller.current_user = self.current_user
+            
+            # Then add the product to cart
+            added = self.sale_controller.add_to_cart(product, quantity)
+            if added:
+                self.logger.info(f"Added {quantity} of {product.name} to cart")
+                return True
+            else:
+                self.logger.error(f"Failed to add {product.name} to cart")
+                return False
+        except Exception as e:
+            self.logger.error(f"Error adding product to cart: {str(e)}")
+            return False
     
     def is_product_available(self, product: Product) -> bool:
         """Check if a product is available."""

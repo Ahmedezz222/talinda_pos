@@ -523,16 +523,62 @@ QSlider::handle:horizontal:hover {
 }
 
 .product-card {
-    background-color: white;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #ffffff, stop:1 #f8f9fa);
     border: 2px solid #e0e0e0;
-    border-radius: 12px;
-    padding: 12px;
-    margin: 5px;
+    border-radius: 15px;
+    padding: 15px;
+    margin: 8px;
+    min-width: 180px;
+    min-height: 200px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .product-card:hover {
-    border-color: #0097e6;
-    background-color: #f8f9fa;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #f8f9fa, stop:1 #ffffff);
+    border: 2px solid #0097e6;
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.15);
+}
+
+.product-card QLabel {
+    color: #2c3e50;
+    font-weight: bold;
+    margin: 5px 0;
+}
+
+.product-card QLabel#price {
+    color: #27ae60;
+    font-size: 16px;
+    font-weight: bold;
+    background-color: #e8f5e9;
+    border-radius: 8px;
+    padding: 5px 10px;
+}
+
+.product-card QLabel#description {
+    color: #7f8c8d;
+    font-size: 12px;
+    font-weight: normal;
+}
+
+.product-card QPushButton {
+    background-color: #0097e6;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 15px;
+    font-weight: bold;
+    font-size: 13px;
+    margin-top: 10px;
+}
+
+.product-card QPushButton:hover {
+    background-color: #00a8ff;
+}
+
+.product-card QPushButton:pressed {
+    background-color: #0088cc;
 }
 
 .category-button {

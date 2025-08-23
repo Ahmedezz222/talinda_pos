@@ -124,12 +124,12 @@ class ResponsiveUI:
         
         # Card sizes for different screen categories
         card_sizes = {
-            'mobile': (140, 110),
-            'tablet': (160, 120),
-            'desktop': (180, 130),
-            'large_desktop': (200, 140),
-            'ultra_wide': (220, 150),
-            'extra_large': (240, 160)
+            'mobile': (140, 160),
+            'tablet': (150, 170),
+            'desktop': (160, 180),
+            'large_desktop': (170, 190),
+            'ultra_wide': (180, 200),
+            'extra_large': (190, 210)
         }
         
         width, height = card_sizes.get(screen_category, (180, 130))
