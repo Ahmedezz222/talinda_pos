@@ -8,4 +8,3 @@ PyQtWebEngine>=5.15.0  # For web content rendering
 pytest>=7.0.0  # For testing
 black>=22.0.0  # For code formatting
 pyinstaller>=4.5.0  # For creating executables
-psutil>=5.8.0  # For process management

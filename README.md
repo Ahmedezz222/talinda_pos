@@ -15,20 +15,12 @@ A modern Point of Sale system built with PyQt5 and SQLAlchemy.
 
 ## Installation
 
-### Method 1: Using the Batch Installer (Recommended)
+### Method 1: Using the Installer (Recommended)
 
 1. Download the latest release from the releases page
-2. Extract the files to your desired location
-3. Run `install.bat` by double-clicking it
-4. Wait for the installation to complete
-5. Launch Talinda POS from the Desktop shortcut or from the `dist` folder
-
-The batch installer will:
-- Set up a Python virtual environment
-- Install all required dependencies
-- Build the executable
-- Create a desktop shortcut
-- Configure everything automatically
+2. Run the installer executable
+3. Follow the installation wizard instructions
+4. Launch Talinda POS from the Start Menu or Desktop shortcut
 
 ### Method 2: Manual Installation
 
